@@ -1,0 +1,13 @@
+:root {
+  --bg: #14110d;
+  --bg-panel: #1e1a14;
+  --bg-card: #262019;
+  --border: #3a3128;
+  --text: #f0e6d6;
+  --text-muted: #a89a83;
+  --accent: #c9a227;
+  --accent-strong: #e3bf3f;
+  --ok: #7fb069;
+  --warn: #e0a458;
+  --danger: #d1604d;
+}

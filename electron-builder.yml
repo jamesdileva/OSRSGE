@@ -1,0 +1,8 @@
+appId: com.osrsge.analyzer
+productName: OSRS GE Analyzer
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+directories:
+  output: release
