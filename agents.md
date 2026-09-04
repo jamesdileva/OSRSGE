@@ -4,6 +4,50 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 4 — Local Historical Storage (2026-09-04)
+
+**Goal:** accumulate useful data — close and reopen without losing history
+(roadmap §6).
+
+**Did:**
+- `core/history/HistoryRepository.ts`: guide §15 interface verbatim
+  (`saveSnapshots`/`getItemHistory`/`getLatestSnapshot`).
+- `storage/json/JsonHistoryRepository.ts`: `<baseDir>/history/<YYYY-MM-DD>/
+  <epochMs>.json`, one file per pull. Atomic writes (tmp + rename),
+  timestamp-exists dedupe skip, corrupt files tolerated, 7-day retention
+  prune on save (constructor-configurable).
+- `core/history/snapshotService.ts`: fetch → normalize → persist with a
+  refresh lock — concurrent callers share one in-flight promise (guide §42),
+  lock always released, failures propagate.
+- `storage/paths.ts`: `defaultBaseDir()` mirroring Electron `userData`
+  conventions (APPDATA / Application Support / XDG) + `historyDir()`.
+  All node APIs via explicit `node:` imports — no tsconfig change needed.
+- `scripts/check-market.ts`: persists each live pull and prints the previous
+  run's #4151 snapshot — the close/reopen proof.
+- Tests: 11 new (38 total) — round-trip + item/range filtering, newest-wins,
+  empty-save no-op, dedupe skip, retention prune, corrupt tolerance,
+  refresh counts/persistence, single-flight lock, lock release on failure,
+  path conventions. Temp-dir backed, zero network.
+
+**Decisions:**
+- Timestamped batch files (not per-item files): matches architecture §20's
+  daily grouping, one write per pull, trivial range scans for MVP volumes.
+  ~140MB/day at full pull size → documents the Sprint 17 SQLite trigger.
+- Retention default 7 days; "already stored" (not deep-compare) dedupe.
+- `getLatestSnapshot` scans newest-first and returns on first hit.
+
+**Verified:**
+- `npm test` → 10 files, 38/38 pass (zero network).
+- `npm run typecheck` → clean. `npm run build` → clean. `npm run lint` → clean.
+- `npm run check:market` twice: run 1 `previous #4151: none (first run)`,
+  run 2 `previous #4151: high=805569 @ 2026-09-04T01:29:44Z` — persistence
+  across processes proven.
+- Fixed during verification: tests caught a real bug — day dir must be
+  created before writing the tmp file; also fixed three wrong-depth
+  `../` imports (tsc caught what vite silently resolved).
+
+**Commit:** `Sprint 4: Local historical storage`
+
 ## Sprint 3 — Normalization (2026-09-04)
 
 **Goal:** cut the cord — nothing past this layer sees Wiki shapes, `null`s,

@@ -4,8 +4,11 @@
  * manual verification tool, NOT a test (tests must stay offline, guide §46).
  */
 import { ItemMetadataStore } from '../core/items/itemMetadata.ts';
+import { SnapshotService } from '../core/history/snapshotService.ts';
 import { normalizeLatest } from '../core/market/normalization/normalizer.ts';
 import { WikiPriceProvider } from '../core/market/providers/WikiPriceProvider.ts';
+import { JsonHistoryRepository } from '../storage/json/JsonHistoryRepository.ts';
+import { defaultBaseDir } from '../storage/paths.ts';
 
 const SPOT_CHECK_ID = 4151; // Abyssal whip
 
@@ -30,6 +33,14 @@ console.log(
 const normalized = normalizeLatest(latest);
 console.log(
   `Normalized: ${normalized.snapshots.length} snapshots kept, ${normalized.excluded} excluded`,
+);
+
+const repository = new JsonHistoryRepository(defaultBaseDir());
+const previous = await repository.getLatestSnapshot(SPOT_CHECK_ID);
+const refresh = await new SnapshotService(provider, repository).refresh();
+console.log(
+  `History: saved ${refresh.snapshots} snapshots (${refresh.excluded} excluded); ` +
+    `previous #${SPOT_CHECK_ID}: ${previous === null ? 'none (first run)' : `high=${String(previous.high)} @ ${new Date(previous.timestamp).toISOString()}`}`,
 );
 
 const metadata = new ItemMetadataStore(provider);
