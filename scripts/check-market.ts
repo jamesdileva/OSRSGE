@@ -1,9 +1,10 @@
 /**
- * Live verification script for Sprint 2 (roadmap §4).
+ * Live verification script for Sprints 2–3 (roadmap §4–5).
  * Run with `npm run check:market`. Hits the real Wiki API — this is a
  * manual verification tool, NOT a test (tests must stay offline, guide §46).
  */
 import { ItemMetadataStore } from '../core/items/itemMetadata.ts';
+import { normalizeLatest } from '../core/market/normalization/normalizer.ts';
 import { WikiPriceProvider } from '../core/market/providers/WikiPriceProvider.ts';
 
 const SPOT_CHECK_ID = 4151; // Abyssal whip
@@ -24,6 +25,11 @@ if (spot === undefined) {
 }
 console.log(
   `Spot check #${SPOT_CHECK_ID}: high=${String(spot.high)} low=${String(spot.low)}`,
+);
+
+const normalized = normalizeLatest(latest);
+console.log(
+  `Normalized: ${normalized.snapshots.length} snapshots kept, ${normalized.excluded} excluded`,
 );
 
 const metadata = new ItemMetadataStore(provider);

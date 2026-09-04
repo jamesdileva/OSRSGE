@@ -4,6 +4,43 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 3 — Normalization (2026-09-04)
+
+**Goal:** cut the cord — nothing past this layer sees Wiki shapes, `null`s,
+or untrusted numbers (roadmap §5).
+
+**Did:**
+- `core/market/normalization/normalizer.ts`: pure `normalizeEntry` +
+  `normalizeLatest` producing the architecture §11 `MarketSnapshot`
+  (`itemId/timestamp/high?/low?/highTime?/lowTime?/volume?`).
+- Rules: provider `null` → `undefined`; non-positive/non-finite price side →
+  `undefined`, record excluded (counted) only if both sides missing; invalid
+  `highTime`/`lowTime` (≤0 or beyond fetch time + 5min skew) dropped while
+  valid times are kept independently of their price side; `timestamp` =
+  provider `fetchedAt`; unknown IDs pass through (snapshots stay ID-keyed,
+  names resolve at view-model time); `volume` stays `undefined` for `/latest`.
+- `scripts/check-market.ts`: now also prints normalized kept/excluded counts.
+- Tests: 9 new (27 total) — valid, high-only, low-only, zero/negative sides,
+  both-missing exclusion, bad-time tolerance, unknown-ID passthrough,
+  invalidRecords carry-over, malformed-envelope rejection at provider boundary.
+
+**Decisions:**
+- Per scoping answers: partial snapshots kept (side → `undefined`), time
+  fields judged independently of prices, exclusion only when both sides missing.
+- `invalidRecords` from the provider seed the normalizer `excluded` count —
+  one continuous rejection tally from HTTP to model.
+
+**Verified:**
+- `npm test` → 7 files, 27/27 pass (zero network).
+- `npm run typecheck` → clean. `npm run build` → clean. `npm run lint` → clean.
+- `npm run check:market` (live): `Normalized: 4534 snapshots kept,
+  0 excluded` — full real-world pull normalizes losslessly.
+- Fixed during verification: two test expectations wrongly assumed a valid
+  `highTime` is dropped with its price side — code correctly keeps them
+  independent.
+
+**Commit:** `Sprint 3: Latest-price normalization`
+
 ## Sprint 2 — Market Data Provider (2026-09-04)
 
 **Goal:** retrieve real OSRS GE data through a validated, provider-independent
