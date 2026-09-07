@@ -2,13 +2,15 @@ import { WIKI_API_BASE_URL } from '../../../shared/constants.js';
 import type { FetchFn } from './httpClient.js';
 import { requestJson } from './httpClient.js';
 import type {
+  AveragesEntry,
+  AveragesSnapshot,
   LatestEntry,
   LatestSnapshot,
   MappingItem,
   MappingSnapshot,
   MarketDataProvider,
 } from './MarketDataProvider.js';
-import { LatestEntrySchema, LatestEnvelopeSchema, MappingEntrySchema, MappingEnvelopeSchema } from './schemas.js';
+import { AveragesEntrySchema, AveragesEnvelopeSchema, LatestEntrySchema, LatestEnvelopeSchema, MappingEntrySchema, MappingEnvelopeSchema } from './schemas.js';
 
 const NUMERIC_KEY = /^\d+$/;
 
@@ -74,5 +76,45 @@ export class WikiPriceProvider implements MarketDataProvider {
       });
     }
     return { items, fetchedAt: Date.now(), invalidRecords };
+  }
+
+  async getFiveMinute(timestamp?: number): Promise<AveragesSnapshot> {
+    return this.getAverages('5m', timestamp);
+  }
+
+  async getHourly(timestamp?: number): Promise<AveragesSnapshot> {
+    return this.getAverages('1h', timestamp);
+  }
+
+  private async getAverages(
+    endpoint: '5m' | '1h',
+    timestamp?: number,
+  ): Promise<AveragesSnapshot> {
+    const url =
+      timestamp === undefined
+        ? `${this.baseUrl}/${endpoint}`
+        : `${this.baseUrl}/${endpoint}?timestamp=${timestamp}`;
+    const envelope = AveragesEnvelopeSchema.parse(await requestJson(url, this.fetchFn));
+    const entries: Record<number, AveragesEntry> = {};
+    let invalidRecords = 0;
+    for (const [key, value] of Object.entries(envelope.data)) {
+      const parsed = NUMERIC_KEY.test(key) ? AveragesEntrySchema.safeParse(value) : null;
+      if (parsed === null || !parsed.success) {
+        invalidRecords += 1;
+        continue;
+      }
+      entries[Number(key)] = {
+        avgHigh: parsed.data.avgHighPrice,
+        avgLow: parsed.data.avgLowPrice,
+        highVolume: parsed.data.highPriceVolume ?? 0,
+        lowVolume: parsed.data.lowPriceVolume ?? 0,
+      };
+    }
+    return {
+      entries,
+      bucketTimestamp: envelope.timestamp,
+      fetchedAt: Date.now(),
+      invalidRecords,
+    };
   }
 }

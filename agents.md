@@ -4,6 +4,49 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 5 — Analytics Engine (2026-09-07)
+
+**Goal:** turn snapshots into useful metrics (roadmap §7).
+
+**Did:**
+- Provider: `getFiveMinute(timestamp?)` + `getHourly(timestamp?)` returning
+  `AveragesSnapshot` (single bulk request per call; shared private fetcher).
+  Bulk `/1h` shape verified live: `{data: {"2": {avgHighPrice,
+  highPriceVolume, avgLowPrice, lowPriceVolume}}, timestamp}` (~290KB/pull).
+- `normalizeAverages`: bucket averages → `MarketSnapshot` with `volume` =
+  high+low trade counts (0 kept — meaningful), timestamp = bucket start ms.
+- `core/market/analytics/`: pure `snapshotPrice` (midpoint + fallback) +
+  `findClosestSnapshot` (tolerance alignment); `priceChanges` (1h/6h/24h,
+  tolerances 15m/1h/3h); `spread` (high−low over midpoint, verified Wiki
+  semantics: high = instant-buy/ask, low = instant-sell/bid); `volatility`
+  (population stddev of simple returns, trailing 24h, min 4 points);
+  `liquidity` (trailing-24h volume-sum percentile vs universe);
+  `trendConsistency` (sign agreement weighted 1h:1/6h:2/24h:3, needs ≥2
+  windows); `computeMetrics` orchestrator → `ItemMetrics` (scoring fields
+  left for Sprint 6).
+- `scripts/check-analytics.ts` + `npm run check:analytics`: backfills 24
+  hourly buckets, prints real metrics for #4151 + universe liquidity.
+- Tests: 24 new (62 total) — every metric unit-tested on synthetic data
+  per roadmap, plus averages parse/URL-timestamp/malformed fixtures.
+
+**Decisions:**
+- Per scoping answers: midpoint+fallback price series; 24-request backfill
+  demo; time-based 24h volatility window; 24h volume-sum liquidity percentile.
+- `1h=n/a` on hourly buckets is correct behavior, not a bug: bucket-start
+  points sit ~30+ min from the rolling 1h target, outside the 15-min
+  tolerance — the guard working as designed.
+- `getLatestSnapshot`-style single-item reads unchanged; liquidity universe
+  is caller-assembled (no repository change).
+
+**Verified:**
+- `npm test` → 17 files, 62/62 pass (zero network).
+- `npm run typecheck` → clean. `npm run build` → clean. `npm run lint` → clean.
+- `npm run check:analytics` (live): 24/24 buckets, 4168-item universe,
+  whip price 806507.5, 6h +0.16%, 24h −1.47%, spread 12149gp (1.51%),
+  volatility 0.0068, liquidity 70.0/100, trend 60.0/100.
+
+**Commit:** `Sprint 5: Analytics engine`
+
 ## Sprint 4 — Local Historical Storage (2026-09-04)
 
 **Goal:** accumulate useful data — close and reopen without losing history

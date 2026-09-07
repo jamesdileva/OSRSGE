@@ -1,4 +1,5 @@
 import type {
+  AveragesSnapshot,
   LatestEntry,
   LatestSnapshot,
 } from '../providers/MarketDataProvider.js';
@@ -91,6 +92,42 @@ export function normalizeLatest(latest: LatestSnapshot): NormalizedBatch {
     if (snapshot === null) {
       excluded += 1;
       continue;
+    }
+    snapshots.push(snapshot);
+  }
+  return { snapshots, excluded };
+}
+
+/**
+ * Normalize one /5m or /1h bucket. Bucket averages become high/low sides;
+ * volume is the bucket's total traded units (0 is meaningful — keep it).
+ * The snapshot timestamp is the bucket start (unix ms), NOT the fetch time.
+ */
+export function normalizeAverages(averages: AveragesSnapshot): NormalizedBatch {
+  const timestamp = averages.bucketTimestamp * 1_000;
+  const snapshots: MarketSnapshot[] = [];
+  let excluded = averages.invalidRecords;
+  for (const [key, entry] of Object.entries(averages.entries)) {
+    if (entry === null || typeof entry !== 'object') {
+      excluded += 1;
+      continue;
+    }
+    const high = cleanPrice(entry.avgHigh);
+    const low = cleanPrice(entry.avgLow);
+    if (high === undefined && low === undefined) {
+      excluded += 1;
+      continue;
+    }
+    const snapshot: MarketSnapshot = {
+      itemId: Number(key),
+      timestamp,
+      volume: entry.highVolume + entry.lowVolume,
+    };
+    if (high !== undefined) {
+      snapshot.high = high;
+    }
+    if (low !== undefined) {
+      snapshot.low = low;
     }
     snapshots.push(snapshot);
   }

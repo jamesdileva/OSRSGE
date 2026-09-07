@@ -42,4 +42,30 @@ export interface MarketDataProvider {
   getLatest(): Promise<LatestSnapshot>;
   /** Full item metadata catalogue (names, members, buy limits). */
   getMapping(): Promise<MappingSnapshot>;
+  /**
+   * Bulk 5-minute averages for one 5-minute bucket (bulk history, Sprint 5).
+   * `timestamp` selects the bucket start (unix seconds); omitted = latest.
+   */
+  getFiveMinute(timestamp?: number): Promise<AveragesSnapshot>;
+  /**
+   * Bulk hourly averages for one 1-hour bucket.
+   * `timestamp` selects the bucket start (unix seconds); omitted = latest.
+   */
+  getHourly(timestamp?: number): Promise<AveragesSnapshot>;
+}
+
+export interface AveragesEntry {
+  avgHigh: number | null;
+  avgLow: number | null;
+  highVolume: number;
+  lowVolume: number;
+}
+
+export interface AveragesSnapshot {
+  entries: Record<number, AveragesEntry>;
+  /** Bucket start (unix seconds, as reported by the API). */
+  bucketTimestamp: number;
+  fetchedAt: number;
+  /** Records rejected during validation (counted, never fatal). */
+  invalidRecords: number;
 }

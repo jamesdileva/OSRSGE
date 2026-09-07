@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
     "check:market": "vite-node scripts/check-market.ts",
+    "check:analytics": "vite-node scripts/check-analytics.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
