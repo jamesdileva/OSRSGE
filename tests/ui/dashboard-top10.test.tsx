@@ -34,6 +34,14 @@ describe('Sprint 7 slice-1 dashboard Top-10', () => {
     expect(vm.summary).toMatchObject({ itemsAnalyzed: 12, opportunitiesFound: 12 });
   });
 
+  it('view-model is pure: never mutates caller objects across calls (review #37)', () => {
+    const opportunities = Array.from({ length: 3 }, (_, i) => makeOpportunity(i + 1, (i + 1) * 10));
+    const before = opportunities.map((o) => o.rank);
+    buildDashboardViewModel({ opportunities, itemsAnalyzed: 3 });
+    buildDashboardViewModel({ opportunities, itemsAnalyzed: 3 });
+    expect(opportunities.map((o) => o.rank)).toEqual(before);
+  });
+
   it('renders Top-10 sorted by finalScore desc with risk text (not color-only)', () => {
     const opportunities = [makeOpportunity(1, 10), makeOpportunity(2, 90), makeOpportunity(3, 50)];
     render(<Dashboard status="success" opportunities={opportunities} itemsAnalyzed={3} />);

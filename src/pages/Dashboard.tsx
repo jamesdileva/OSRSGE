@@ -36,7 +36,7 @@ export default function Dashboard({
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
-  const status = statusProp ?? 'idle';
+  const status = statusProp ?? bridgeStatus;
   const error = errorProp ?? (statusProp !== undefined ? bridgeError : null);
   const viewModel = buildDashboardViewModel({ opportunities, itemsAnalyzed, lastUpdated });
 
