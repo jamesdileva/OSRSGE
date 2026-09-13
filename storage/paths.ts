@@ -25,3 +25,7 @@ export function defaultBaseDir(): string {
 export function historyDir(baseDir: string): string {
   return path.join(baseDir, 'history');
 }
+
+export function watchlistFile(baseDir: string): string {
+  return path.join(baseDir, 'watchlist.json');
+}
