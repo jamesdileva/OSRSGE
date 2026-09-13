@@ -99,6 +99,14 @@ describe('Sprint 8 slice-2 price history (stub-first IPC + pure chart)', () => {
     await expect(fetchItemHistory({ itemId: 1, window: '24h' })).rejects.toThrow('Desktop bridge unavailable');
   });
 
+  it('fetchItemHistory throws a friendly error on a fetchTop10-only stale preload', async () => {
+    window.osrsApi = {
+      app: { getVersion: vi.fn() },
+      market: { fetchTop10: vi.fn() },
+    } as unknown as NonNullable<typeof window.osrsApi>;
+    await expect(fetchItemHistory({ itemId: 1, window: '24h' })).rejects.toThrow('Desktop bridge unavailable');
+  });
+
   it('PriceChart is pure: renders an SVG slope with no bridge', () => {
     render(<PriceChart points={makePoints(1, [100, 110, 130])} itemName="Item 1" windowLabel="24h" />);
     expect(screen.getByRole('img', { name: /Price history for Item 1 \(24h\)/ })).toBeInTheDocument();

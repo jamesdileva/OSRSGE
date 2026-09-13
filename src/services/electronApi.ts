@@ -32,7 +32,7 @@ export async function fetchAppVersion(): Promise<string> {
  */
 export async function fetchTop10(request?: MarketTop10Request): Promise<MarketTop10Response> {
   const api = getDesktopApi();
-  if (api?.market == null) {
+  if (api?.market == null || typeof api.market.fetchTop10 !== 'function') {
     throw new Error('Desktop bridge unavailable');
   }
   return api.market.fetchTop10(request);
@@ -45,7 +45,7 @@ export async function fetchTop10(request?: MarketTop10Request): Promise<MarketTo
  */
 export async function fetchItemHistory(request: MarketHistoryRequest): Promise<MarketHistoryResponse> {
   const api = getDesktopApi();
-  if (api?.market == null) {
+  if (api?.market == null || typeof api.market.fetchHistory !== 'function') {
     throw new Error('Desktop bridge unavailable');
   }
   return api.market.fetchHistory(request);
