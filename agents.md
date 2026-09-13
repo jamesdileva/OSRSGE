@@ -4,6 +4,47 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 8 (slice 2) — Stub-first history IPC + pure PriceChart (2026-09-13)
+
+**Goal:** second explainability surface (roadmap §10, guide §32): price
+history for the selected item behind a stub `market:getHistory` feed, pure
+SVG `PriceChart` reusing the selection state; review #54 APPROVE conditions.
+
+**Did:**
+- `shared/ipc.ts`: `MARKET_GET_HISTORY` + explicit `HistoryWindow`
+  (`'24h'|'7d`) + `MarketHistoryRequest/Response` reusing the Sprint 3
+  `MarketSnapshot` point shape (no parallel history types);
+  `OsrsApiMarket.fetchHistory` added.
+- `electron/ipc/marketStub.ts` + `market.handlers.ts` (wired in `main.ts`,
+  exposed in `preload.ts`): deterministic stub points (24h=12, 7d=14,
+  oldest-first, gentle uptrend) — never touches live provider/history/
+  scheduler; handler deps keep `getHistory` optional so slice-1 callers work.
+- `src/services/electronApi.ts`: `fetchItemHistory` — throws when bridge
+  absent or stale preload (`market == null`) so the Dashboard falls back.
+- `src/components/dashboard/PriceChart.tsx` (new, pure): SVG polyline,
+  midpoint price series, empty state on <2 points; zero IPC/chart.js/network.
+- `Dashboard.tsx`: history effect with cancelled-flag + captured-id stale
+  guard; error precedence `errorProp ?? historyError ?? top10Error ??
+  bridgeError`; 24h chart section under details with loading/error/
+  bridge-absent states; selection fix — internal id only written when
+  uncontrolled so controlled-clear cannot resurrect stale ids.
+- `TopOpportunityTable.tsx`: keyboard rows (`tabIndex` + Enter/Space).
+- Tests: strengthened D#200 (asserts rendered ×riskMult/×confMult text +
+  displayed base×mults≈final); new `price-history.test.tsx` (12 tests:
+  contract, stub shape/order, handler forwarding, bridge-absent + stale
+  throws, pure chart, chart-after-click, rapid-reselect stale guard,
+  history-error + errorProp precedence, controlled-clear, keyboard);
+  fixed `dashboard-top10-live` mocks for required `fetchHistory`.
+
+**Decisions:**
+- Stub-first by design (D#163): proves history wiring before the live
+  pipeline; no S9 filters/presets, no S10 scheduler, scorer/risk/conf untouched.
+- Fixed 24h window in slice-2 (window union typed for later 7d toggle).
+
+**Verified:**
+- `npm test` → 27 files, 124/124 pass (zero network).
+- `npm run typecheck` + `npm run build` green (workspace clean).
+
 ## Sprint 8 (slice 1) — Pure ItemDetailsPanel + score breakdown (2026-09-13)
 
 **Goal:** first explainability surface (roadmap §10, guide §32): props-driven
