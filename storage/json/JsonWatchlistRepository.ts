@@ -29,7 +29,22 @@ export class JsonWatchlistRepository implements WatchlistRepository {
     if (!Array.isArray(parsed)) {
       return [];
     }
-    return parsed.filter(isValidWatchlistEntry).map((entry) => ({ ...entry }));
+    // Tolerant read with store-invariant enforcement: skip invalid records,
+    // strip extra fields to {itemId, addedAt} parity with strict saves, and
+    // dedupe repeat ids first-watch-wins (same invariant as addToWatchlist).
+    const seen = new Set<number>();
+    const out: WatchlistEntry[] = [];
+    for (const record of parsed) {
+      if (!isValidWatchlistEntry(record)) {
+        continue;
+      }
+      if (seen.has(record.itemId)) {
+        continue;
+      }
+      seen.add(record.itemId);
+      out.push({ itemId: record.itemId, addedAt: record.addedAt });
+    }
+    return out;
   }
 
   async save(entries: readonly WatchlistEntry[]): Promise<void> {
@@ -38,7 +53,7 @@ export class JsonWatchlistRepository implements WatchlistRepository {
         throw new Error(`Invalid watchlist entry: ${JSON.stringify(entry)}`);
       }
     }
-    const snapshot: WatchlistEntry[] = entries.map((entry) => ({ ...entry }));
+    const snapshot: WatchlistEntry[] = entries.map((entry) => ({ itemId: entry.itemId, addedAt: entry.addedAt }));
     await mkdir(path.dirname(this.file), { recursive: true });
     await writeFile(`${this.file}.tmp`, JSON.stringify(snapshot), 'utf8');
     await rename(`${this.file}.tmp`, this.file);

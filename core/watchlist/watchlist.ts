@@ -29,8 +29,8 @@ function assertItemId(itemId: number): void {
 }
 
 function assertNowMs(nowMs: number): void {
-  if (!Number.isFinite(nowMs)) {
-    throw new Error(`Invalid nowMs: ${String(nowMs)} (expected finite timestamp)`);
+  if (!Number.isFinite(nowMs) || nowMs < 0) {
+    throw new Error(`Invalid nowMs: ${String(nowMs)} (expected finite timestamp >= 0)`);
   }
 }
 
@@ -44,7 +44,8 @@ export function isValidWatchlistEntry(value: unknown): value is WatchlistEntry {
     Number.isInteger(record.itemId) &&
     (record.itemId as number) > 0 &&
     typeof record.addedAt === 'number' &&
-    Number.isFinite(record.addedAt as number)
+    Number.isFinite(record.addedAt as number) &&
+    (record.addedAt as number) >= 0
   );
 }
 
