@@ -179,6 +179,33 @@ describe('S10 slice-2 scheduler runtime (fake timers, zero network)', () => {
       stopScheduler();
     }
   });
+
+  it('a throwing notify never rejects the refresh and the loop reschedules (review #96)', async () => {
+    const fakes = makeTimerFakes();
+    const refresh = vi.fn(async () => undefined);
+    const notify = vi.fn(() => {
+      throw new Error('webContents destroyed');
+    });
+    const handle = startScheduler({ intervalMs: 300_000 }, {
+      refresh,
+      notify,
+      now: () => 0,
+      schedule: fakes.schedule,
+      cancel: fakes.cancel,
+    });
+    try {
+      const scheduledBefore = fakes.schedule.mock.calls.length;
+      // Manual trigger succeeds despite the notify throw.
+      await expect(handle.refreshNow()).resolves.toBeUndefined();
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(handle.getState().consecutiveFailures).toBe(0);
+      // Timer loop survives: a fresh tick was scheduled after the refresh.
+      expect(fakes.schedule.mock.calls.length).toBeGreaterThan(scheduledBefore);
+    } finally {
+      handle.stop();
+      stopScheduler();
+    }
+  });
 });
 
 describe('S10 slice-2 refresh IPC contract (offline-pure)', () => {

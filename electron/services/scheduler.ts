@@ -147,8 +147,7 @@ export interface SchedulerUpdate {
   lastSuccessAt?: number;
 }
 
-export interface SchedulerRuntimeDeps {
-  /** Stub-only refresh work (default: no-op success). */
+export interface SchedulerRuntimeDeps {  /** Stub-only refresh work (default: no-op success). */
   refresh?: SchedulerRefreshHandler;
   /** Called after every completed refresh (success or failure). */
   notify?: (update: SchedulerUpdate) => void;
@@ -169,7 +168,12 @@ export interface SchedulerHandle {
 /** Singleton owned by start/stopScheduler so main.ts stays a thin owner. */
 let activeHandle: SchedulerHandle | null = null;
 
-function toUpdate(state: SchedulerState): SchedulerUpdate {
+/**
+ * Schedule snapshot for the renderer (review #96: exported so main.ts
+ * reuses it instead of rebuilding the payload inline — one shape, no
+ * drift). Structurally identical to shared `MarketRefreshUpdate`.
+ */
+export function toSchedulerUpdate(state: SchedulerState): SchedulerUpdate {
   return {
     nextRunAt: state.nextRunAt,
     consecutiveFailures: state.consecutiveFailures,
@@ -215,8 +219,16 @@ export function startScheduler(config?: SchedulerConfig, deps?: SchedulerRuntime
     } catch {
       state = markRefreshFailure(at, state);
     }
-    notify?.(toUpdate(state));
-    scheduleNext();
+    // Review #96 finding 1 (robustness): a throwing notify (e.g.
+    // webContents.send on a destroyed window) must never reject the
+    // refresh or kill the timer loop — swallow it, always reschedule.
+    try {
+      notify?.(toSchedulerUpdate(state));
+    } catch {
+      // Renderer teardown is not a scheduler failure; streak already stamped.
+    } finally {
+      scheduleNext();
+    }
   };
 
   const runShared = (): Promise<void> => {

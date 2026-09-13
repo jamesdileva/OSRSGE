@@ -7,7 +7,7 @@ import { registerAppHandlers } from './ipc/app.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
-import { startScheduler } from './services/scheduler.js';
+import { startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -49,13 +49,9 @@ void app.whenReady().then(() => {
   });
   ipcMain.handle(MARKET_REFRESH_NOW, async (): Promise<MarketRefreshUpdate> => {
     await scheduler.refreshNow();
-    const state = scheduler.getState();
-    return {
-      nextRunAt: state.nextRunAt,
-      consecutiveFailures: state.consecutiveFailures,
-      ...(state.lastRunAt !== undefined ? { lastRunAt: state.lastRunAt } : {}),
-      ...(state.lastSuccessAt !== undefined ? { lastSuccessAt: state.lastSuccessAt } : {}),
-    };
+    // Review #96 finding 2: reuse the scheduler's snapshot helper so the
+    // push and invoke payloads can never drift apart.
+    return toSchedulerUpdate(scheduler.getState());
   });
 
   app.on('activate', () => {
@@ -69,4 +65,11 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+// Review #96 nit 3: stop the scheduler timer explicitly on quit — harmless
+// today (process exit kills the handle) but cheaper than debugging a
+// lingering handle in tests/packaged runs.
+app.on('before-quit', () => {
+  stopScheduler();
 });
