@@ -35,6 +35,13 @@ export interface RankingConfig {
   minHistoryMinutes: number;
 }
 
+/** Filter inputs for candidacy (guide §25, architecture §13). */
+export interface RankableCandidate {
+  price: number;
+  volume?: number;
+  historyMinutes?: number;
+}
+
 /** Per-component scores, each normalized to 0–100 (guide §26). */
 export interface ComponentScores {
   momentum: number;

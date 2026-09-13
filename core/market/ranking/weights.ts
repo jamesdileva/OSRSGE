@@ -8,60 +8,78 @@ import type { RankingPresetName, RankingWeights } from './types.js';
  * so CHEAP_FLIPS leans into spread + profitability instead.
  */
 
-/** Version tag stamped on ranking output for future comparison (guide §51). */
+/**
+ * Version tag stamped on ranking output for future comparison (guide §51).
+ * Content-aware: derived from the preset's actual shares, so any rebalance
+ * changes the version (e.g. `0.1-balanced-m30l20s20p15c10v5`).
+ */
 export function rankingVersionForPreset(preset: RankingPresetName): string {
-  return `0.1-${preset.toLowerCase()}`;
+  const weights = RANKING_PRESETS[preset];
+  if (weights === undefined) {
+    throw new Error(`Unknown ranking preset: ${String(preset)}`);
+  }
+  const pct = (share: number): number => Math.round(share * 100);
+  return (
+    `0.1-${preset.toLowerCase()}` +
+    `-m${pct(weights.momentum)}l${pct(weights.liquidity)}s${pct(weights.spread)}` +
+    `p${pct(weights.profitability)}c${pct(weights.consistency)}v${pct(weights.volatility)}`
+  );
 }
 
-export const DEFAULT_WEIGHTS: RankingWeights = Object.freeze({
+function freezeWeights(weights: RankingWeights): Readonly<RankingWeights> {
+  return Object.freeze({ ...weights });
+}
+
+export const DEFAULT_WEIGHTS: Readonly<RankingWeights> = freezeWeights({
   momentum: 0.3,
   liquidity: 0.2,
   spread: 0.2,
   profitability: 0.15,
   consistency: 0.1,
   volatility: 0.05,
-}) as RankingWeights;
+});
 
-export const RANKING_PRESETS: Record<RankingPresetName, RankingWeights> = {
-  BALANCED: { ...DEFAULT_WEIGHTS },
-  CONSERVATIVE: {
-    momentum: 0.25,
-    liquidity: 0.3,
-    spread: 0.15,
-    profitability: 0.1,
-    consistency: 0.15,
-    volatility: 0.05,
-  },
-  AGGRESSIVE: {
-    momentum: 0.4,
-    liquidity: 0.1,
-    spread: 0.2,
-    profitability: 0.15,
-    consistency: 0.05,
-    volatility: 0.1,
-  },
-  CHEAP_FLIPS: {
-    momentum: 0.2,
-    liquidity: 0.15,
-    spread: 0.3,
-    profitability: 0.2,
-    consistency: 0.1,
-    volatility: 0.05,
-  },
-  HIGH_PROFIT: {
-    momentum: 0.15,
-    liquidity: 0.15,
-    spread: 0.25,
-    profitability: 0.3,
-    consistency: 0.1,
-    volatility: 0.05,
-  },
-};
+export const RANKING_PRESETS: Record<RankingPresetName, Readonly<RankingWeights>> =
+  Object.freeze({
+    BALANCED: freezeWeights({ ...DEFAULT_WEIGHTS }),
+    CONSERVATIVE: freezeWeights({
+      momentum: 0.25,
+      liquidity: 0.3,
+      spread: 0.15,
+      profitability: 0.1,
+      consistency: 0.15,
+      volatility: 0.05,
+    }),
+    AGGRESSIVE: freezeWeights({
+      momentum: 0.4,
+      liquidity: 0.1,
+      spread: 0.2,
+      profitability: 0.15,
+      consistency: 0.05,
+      volatility: 0.1,
+    }),
+    CHEAP_FLIPS: freezeWeights({
+      momentum: 0.2,
+      liquidity: 0.15,
+      spread: 0.3,
+      profitability: 0.2,
+      consistency: 0.1,
+      volatility: 0.05,
+    }),
+    HIGH_PROFIT: freezeWeights({
+      momentum: 0.15,
+      liquidity: 0.15,
+      spread: 0.25,
+      profitability: 0.3,
+      consistency: 0.1,
+      volatility: 0.05,
+    }),
+  });
 
 const WEIGHT_SUM_TOLERANCE = 1e-6;
 
 /** True when every share is finite, within [0, 1], and the shares total 1.0. */
-export function isValidWeights(weights: RankingWeights): boolean {
+export function isValidWeights(weights: Readonly<RankingWeights>): boolean {
   const shares = [
     weights.momentum,
     weights.liquidity,
