@@ -4,6 +4,43 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 10 (slice 1) — Pure scheduler timing core (2026-09-13)
+
+**Goal:** first auto-refresh surface (roadmap §12, guide §§41–43): pure
+schedule state + due checks + exponential backoff with zero timers/IPC/UI.
+
+**Did:**
+- `electron/services/scheduler.ts`: pure timing core beside the still-no-op
+  `startScheduler`/`stopScheduler` lifecycle stubs (timers + manual-refresh
+  integration + renderer notification stay slice-2). `SchedulerConfig/State`,
+  `DEFAULT_REFRESH_INTERVAL_MS` (5 min, roadmap UI example),
+  `MIN_REFRESH_INTERVAL_MS` (60 s rate-safety floor, guide §43),
+  `DEFAULT_MAX_BACKOFF_MS` (1 h ceiling); `createSchedulerState` (first run
+  one interval out; throws on non-finite/non-positive interval or time,
+  clamps sub-minute to the floor), `isRefreshDue` (inclusive),
+  `msUntilNextRun` (0 when due), `markRefreshSuccess` (clears streak, next
+  run one interval out), `markRefreshFailure` (interval×2^(n−1) capped at
+  maxBackoff). All helpers take `nowMs` explicitly (no Date.now) and never
+  mutate inputs (frozen-input safe).
+- `tests/scheduler/scheduler.test.ts` — 8 tests (first-run offset, floor
+  clamp, invalid rejection, due boundary ±1 ms, success reset, 1x/2x/4x
+  backoff, cap ceiling, frozen-input purity) — 154 total.
+
+**Decisions:**
+- Slice-1 stays pure by design: no setInterval/timeout (slice-2), no IPC
+  refresh channel, no UI status line, no live refresh path (stub-only data).
+- S9 preset-selector UI deferred until the live scorer pipeline: stub
+  `baseScore` values are hand-set (10/90/50) with identical components, so a
+  client-side recompute from components would be dishonest and would
+  destroy the stub ordering every existing dashboard test asserts.
+- Backoff shape: first retry waits one normal interval, then doubles —
+  gentler than fail-fast ×2, still exponential; sub-minute config clamps
+  (degrades to floor) while garbage (≤0/NaN/Infinity) throws.
+
+**Verified:**
+- `npm test` → 31 files, 154/154 pass (zero network/timers).
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+
 ## Sprint 9 (slice 2) — Filter presets/UI + Infinity-null IPC (2026-09-13)
 
 **Goal:** second filtering surface (roadmap §11): IPC-safe filter round-trip
