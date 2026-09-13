@@ -4,6 +4,50 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 6 (slice 3) — Spread/profit orthogonalization (0.2) + live 0.2 ablation re-run (2026-09-13)
+
+**Goal:** resolve the spread double-count risk before Sprint 7: make spread
+and profitability independent signals, then re-run the live BALANCED Top-10
+ablation on formula 0.2 (review #29 gate).
+
+**Did:**
+- `scorer.ts`: profitability is now absolute-scale and orthogonal to spread —
+  net = spreadGp − 1% tax, then 25×log10(1+net/100) (cheap high-pct/low-gp
+  vs expensive low-pct/high-gp diverge; net ≤ 0 or missing → 0). Spread stays
+  relative (spreadPct×20). Shares unchanged (retune-free).
+- `weights.ts`: `RANKING_FORMULA_VERSION='0.2'` + content-aware
+  `rankingVersionForPreset` (`0.2-<preset>-m..l..s..p..c..v..`) with
+  manual-bump rule (review #27: bump on any scorer formula change).
+- `ablation.ts` + `scripts/check-ablation.ts` (`npm run check:ablation`):
+  BALANCED baseline vs spread=0 renorm vs profitability=0 renorm —
+  Top-10 overlap + Spearman rho over the shared universe (offline helpers
+  unit-tested; script is a live manual tool, not a test).
+- Tests: divergence test (cheap high-pct vs pricey low-pct diverge on
+  profitability while spread pct agrees) + explicit cheapPct/priceyPct
+  assert per review #27; ablation helper tests (renorm, rho=1/−1, swap).
+- Review #27 fixes (9e0f2b7): explicit spread-independence assert shape +
+  formula version constant accepted as minimal (human-discipline
+  enforcement noted, no further churn).
+
+**Decisions:**
+- Retune-free: total margin weight unchanged, now split across two
+  independent signals; no weight tuning before ablation numbers (review #29).
+- No-spread/no-profit rho + Top-10 overlap is the single experiment that
+  disconfirms both the double-count and the log-compression weight-shift risk.
+
+**Verified:**
+- `npm test`, `npm run typecheck`, `npm run build` green (workspace clean).
+- Live `npm run check:ablation` on 0.2 (2026-09-13): 24/24 buckets,
+  universe 4178 items, candidates 3414 —
+  baseline-vs-no-spread overlap 5/10 rho=0.8981,
+  baseline-vs-no-profit overlap 8/10 rho=0.9819 —
+  verdict INDEPENDENT SIGNAL (neither ablation hits overlap≥9 AND rho>0.95).
+- Note: no-profit rho 0.9819 is high but overlap 8/10 misses the second
+  leg, so the gate criterion still passes; watch profit-weight in backtests.
+
+**Commits:** `048e1d9` ablation tooling, `d874371` slice-3 orthogonalization,
+`9e0f2b7` review #27 fixes (all pushed to `origin/main` this cycle).
+
 ## Sprint 6 (slice 2) — Scorer, risk, confidence + scenarios A/B/C (2026-09-13)
 
 **Goal:** first legitimate ranking math on top of the slice-1 contracts
