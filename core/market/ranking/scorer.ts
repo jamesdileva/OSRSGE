@@ -18,11 +18,14 @@ import { isValidWeights, resolveWeights } from './weights.js';
  * Pure and deterministic: ItemMetrics → 0–100 components → weighted base
  * → risk × confidence → ranked Opportunity list. No network, no UI.
  *
- * Calibration notes (v0, starting values):
+ * Calibration notes (v0.2: spread/profit orthogonalized per ablation #23/#24):
  * - Momentum: 50 + 5× the 1h:1/6h:2/24h:3 weighted-average change %.
  *   +2% → 60, +5% → 75, +10% → 100, −10% → 0.
- * - Spread: spreadPct × 20 (2% → 40, 5% → 100).
- * - Profitability: net of an assumed 1% GE-tax bite, (spreadPct − 1) × 25.
+ * - Spread: relative margin signal, spreadPct × 20 (2% → 40, 5% → 100).
+ * - Profitability: absolute-scale signal, orthogonal to spread pct —
+ *   net = spreadGp − 1% of price, then 25×log10(1 + net/100) so cheap
+ *   high-pct/low-gp flips and expensive low-pct/high-gp flips diverge
+ *   (net ≤ 0 or missing → 0; ~100gp → ~7.5, ~4k → ~40, ~7.5k → ~47).
  * - Volatility opportunity: Gaussian peak at 2% (σ 2%) — dead-flat and
  *   extreme churn both score low; moderate churn scores high.
  * - Liquidity / consistency pass through the Sprint 5 0–100 scores.
@@ -65,12 +68,19 @@ export function spreadScore(spreadPct: number | undefined): number {
   return clamp100(spreadPct * 20);
 }
 
-/** (spreadPct − 1% tax) × 25; missing → 0. */
-export function profitabilityScore(spreadPct: number | undefined): number {
-  if (spreadPct === undefined) {
+/** (net absolute profit after 1% tax) → 25×log10(1+net/100); missing/non-positive → 0. */
+export function profitabilityScore(
+  spreadGp: number | undefined,
+  price: number,
+): number {
+  if (spreadGp === undefined || !Number.isFinite(spreadGp) || !Number.isFinite(price)) {
     return 0;
   }
-  return clamp100((spreadPct - GE_TAX_PCT) * 25);
+  const net = spreadGp - price * (GE_TAX_PCT / 100);
+  if (!(net > 0)) {
+    return 0;
+  }
+  return clamp100(25 * Math.log10(1 + net / 100));
 }
 
 /** Gaussian peak at 2% vol (σ 2%); missing → 0. */
@@ -98,7 +108,7 @@ export function scoreComponents(metrics: ItemMetrics): ComponentScores {
     momentum: momentumScore(metrics),
     liquidity: metrics.liquidityScore ?? 0,
     spread: spreadScore(metrics.spreadPct),
-    profitability: profitabilityScore(metrics.spreadPct),
+    profitability: profitabilityScore(metrics.spreadGp, metrics.price),
     consistency: metrics.trendConsistency ?? 0,
     volatility: volatilityOpportunityScore(metrics.volatility),
   };

@@ -11,7 +11,11 @@ import type { RankingPresetName, RankingWeights } from './types.js';
 /**
  * Version tag stamped on ranking output for future comparison (guide §51).
  * Content-aware: derived from the preset's actual shares, so any rebalance
- * changes the version (e.g. `0.1-balanced-m30l20s20p15c10v5`).
+ * changes the version (e.g. `0.2-balanced-m30l20s20p15c10v5`).
+ * Prefix 0.2 = spread/profit orthogonalization (slice-3, ablation #23/#24):
+ * spread scores relative margin (spreadPct), profitability scores absolute
+ * net (log-scale over spreadGp minus 1% tax). Shares unchanged — the total
+ * margin weight is the same, now split across independent signals.
  */
 export function rankingVersionForPreset(preset: RankingPresetName): string {
   const weights = RANKING_PRESETS[preset];
@@ -20,7 +24,7 @@ export function rankingVersionForPreset(preset: RankingPresetName): string {
   }
   const pct = (share: number): number => Math.round(share * 100);
   return (
-    `0.1-${preset.toLowerCase()}` +
+    `0.2-${preset.toLowerCase()}` +
     `-m${pct(weights.momentum)}l${pct(weights.liquidity)}s${pct(weights.spread)}` +
     `p${pct(weights.profitability)}c${pct(weights.consistency)}v${pct(weights.volatility)}`
   );

@@ -102,11 +102,27 @@ describe('scorer components', () => {
     expect(momentumScore({})).toBe(0);
   });
 
-  it('scales spread linearly and nets profitability after the tax bite', () => {
+  it('scales spread linearly and nets profitability on absolute scale, orthogonal to pct', () => {
     expect(spreadScore(2)).toBeCloseTo(40, 9);
     expect(spreadScore(undefined)).toBe(0);
-    expect(profitabilityScore(1.5)).toBeCloseTo(12.5, 9);
-    expect(profitabilityScore(0.5)).toBe(0);
+    // net = 12_000 − 1%×800_000 = 4_000 → 25×log10(41) ≈ 40.3
+    expect(profitabilityScore(12_000, 800_000)).toBeCloseTo(40.3, 1);
+    expect(profitabilityScore(undefined, 800_000)).toBe(0);
+    expect(profitabilityScore(10, 5000)).toBe(0);
+  });
+
+  it('diverges spread pct from absolute profit: same pct, different stakes', () => {
+    // Same 10% relative margin, ×100 stakes → different profitability.
+    const cheap = profitabilityScore(10, 100);
+    const pricey = profitabilityScore(1000, 10_000);
+    expect(spreadScore(10)).toBe(spreadScore(10));
+    expect(pricey).toBeGreaterThan(cheap);
+    // Same absolute net (900gp), different pct → different spread, same profit.
+    expect(spreadScore(1)).toBeLessThan(spreadScore(10));
+    expect(profitabilityScore(1000, 10_000)).toBeCloseTo(
+      profitabilityScore(910, 1000),
+      6,
+    );
   });
 
   it('rewards moderate volatility over flat or extreme churn', () => {

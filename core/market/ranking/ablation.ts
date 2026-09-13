@@ -1,9 +1,9 @@
 import type { Opportunity, RankingWeights } from './types.js';
 
 /**
- * Ablation helpers for the spread/profitability double-count check
- * (review risk 2: spreadScore pct*20 and profitabilityScore (pct-1% tax)*25
- * share the same spread-pct input).
+ * Ablation helpers for the spread/profitability independence check
+ * (review risk 2, fixed in 0.2: spread = relative pct×20,
+ * profitability = absolute log-scale net — independent inputs).
  *
  * Pure and offline: zero a weight + renormalize, compare Top-N sets,
  * Spearman rank correlation over the shared candidate universe.

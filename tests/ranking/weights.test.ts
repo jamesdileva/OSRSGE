@@ -67,7 +67,7 @@ describe('ranking weights', () => {
     expect(() =>
       resolveWeights('BOGUS' as unknown as RankingPresetName),
     ).toThrow('Unknown ranking preset');
-    expect(rankingVersionForPreset('BALANCED')).toBe('0.1-balanced-m30l20s20p15c10v5');
+    expect(rankingVersionForPreset('BALANCED')).toBe('0.2-balanced-m30l20s20p15c10v5');
     expect(() => rankingVersionForPreset('BOGUS' as unknown as RankingPresetName)).toThrow(
       'Unknown ranking preset',
     );
