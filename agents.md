@@ -4,6 +4,41 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 9 (slice 1) — Pure opportunity filters (2026-09-13)
+
+**Goal:** first filtering surface (roadmap §11): pure post-rank
+`Opportunity[]` view filters with zero IPC/scheduler/UI/network.
+
+**Did:**
+- `core/market/ranking/filters.ts` (new, pure): `OpportunityFilters`
+  (membership/minPrice/maxPrice/allowedRisks/minLiquidity/minScore/
+  category) + `DEFAULT_FILTERS` pass-everything baseline +
+  `matchesFilters` predicate + `applyFilters` (fresh array, same refs,
+  original ranks preserved with gaps, never mutates input).
+- `tests/ranking/filters.test.ts` — 9 tests (empty-filters purity,
+  membership split, inclusive price range, risk allowlist incl. empty
+  pass-all, liquidity=components.liquidity disconfirming case,
+  score=finalScore disconfirming case baseScore 95 vs finalScore 40,
+  category no-op, gaps [1,3], DEFAULT_FILTERS baseline).
+- Review #64 CLEAR: agent-b verified all 4 APPROVED #60 conditions
+  independently (liquidity=components.liquidity, score=finalScore,
+  category documented no-op with zero `category` outside filters.ts,
+  isCandidate pre-gate untouched + post-rank gaps) — e3a21c9 APPROVED.
+
+**Decisions:**
+- Slice-1 stays pure by design: no IPC/scheduler/UI (slice-2), no
+  presets change, scorer/risk/confidence untouched (isCandidate remains
+  the pre-rank gate; applyFilters is the post-rank view filter).
+- Fail-closed thresholds (`!(x >= t)` excludes NaN), empty
+  `allowedRisks` = pass-all, `DEFAULT_FILTERS.maxPrice = Infinity`
+  (slice-2 UI serializes to null over IPC) — review #64 non-gating nits.
+
+**Verified:**
+- `npm test` → 28 files, 134/134 pass (zero network).
+- `npm run typecheck` + `npm run build` green (workspace clean).
+
+**Commits:** `e3a21c9` filters + tests (this worklog close-out follows).
+
 ## Sprint 8 (slice 2) — Stub-first history IPC + pure PriceChart (2026-09-13)
 
 **Goal:** second explainability surface (roadmap §10, guide §32): price
