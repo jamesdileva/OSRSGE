@@ -4,6 +4,49 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 6 (slice 2) — Scorer, risk, confidence + scenarios A/B/C (2026-09-13)
+
+**Goal:** first legitimate ranking math on top of the slice-1 contracts
+(review #16 gate was CLEAR).
+
+**Did:**
+- `core/market/ranking/scorer.ts`: pure deterministic scorer —
+  `momentumScore` (50+5× weighted-avg change, 1h:1/6h:2/24h:3),
+  `spreadScore` (pct×20), `profitabilityScore` ((pct−1% tax)×25),
+  `volatilityOpportunityScore` (Gaussian peak 2% σ2%),
+  liquidity/consistency passthrough; `scoreComponents`, `computeBaseScore`
+  (throws on invalid weights), `estimatedProfitPerUnit` (spread − 1% tax),
+  `defaultRankingConfig` (100GP/any-activity/6h), `isCandidate` filter,
+  `rankOpportunities` (filter → score → risk×confidence → sort → rank).
+- `core/market/ranking/risk.ts`: `classifyRisk` (5 warning signals,
+  thin history forces HIGH) + `riskMultiplier` (1.0/0.9/0.7, throws unknown).
+- `core/market/ranking/confidence.ts`: `computeConfidence`
+  (coverage×observations×agreement×freshness, 0–1) + `confidenceMultiplier`
+  (0.70+conf×0.30) + `freshnessFactor` (fresh <2h, 0 at 48h).
+- `weights.ts`: content-aware versions (`0.1-<preset>-m..l..s..p..c..v..`,
+  unknown preset throws) + `Object.freeze` on every preset and the record;
+  `isValidWeights` accepts `Readonly` shares.
+- `types.ts`: added `RankableCandidate` filter-input contract.
+- Tests: 18 new (85 total) — risk (5), confidence (4), scorer components (4)
+  + roadmap scenarios A (high score, LOW/MED), B (HIGH, final<0.6×base),
+  C (strong, LOW), A-outranks-B head-to-head, CHEAP_FLIPS filter-vs-weight
+  (sub-100GP junk never surfaces).
+
+**Decisions:**
+- Missing metric inputs score 0 (no evidence = no opportunity); confidence
+  only penalizes known weakness (unknown factors neutral) to avoid
+  double-punishing hourly-bucket items with legitimately absent 1h windows.
+- Profitability nets an assumed 1% GE-tax bite; multipliers/versions are
+  starting values for backtest tuning, not optima.
+- Cheapness stays a filter: `isCandidate` drops <minPrice before scoring,
+  so CHEAP_FLIPS weights can lean spread/profit without surfacing junk.
+
+**Verified:**
+- `npm test` → 21 files, 85/85 pass (zero network).
+- `npm run typecheck` → clean. `npm run build` → clean.
+
+**Commit:** `Sprint 6 (slice 2): scorer, risk, confidence, and ranking scenarios`
+
 ## Sprint 6 (slice 1) — Ranking weights, presets, opportunity contract (2026-09-12)
 
 **Goal:** start ranking (roadmap scoring) with contracts + weights only —
