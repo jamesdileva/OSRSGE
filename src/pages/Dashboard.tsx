@@ -1,18 +1,49 @@
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
+import type { Opportunity } from '../../core/market/ranking/types.js';
+import MarketSummary from '../components/dashboard/MarketSummary.tsx';
+import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
+import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
 import { fetchAppVersion, isDesktopBridgeAvailable } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
-type Status = 'idle' | 'loading' | 'success' | 'error';
+export type DashboardStatus = 'idle' | 'loading' | 'success' | 'error';
 
-export default function Dashboard(): JSX.Element {
-  const [status, setStatus] = useState<Status>(() => (isDesktopBridgeAvailable() ? 'loading' : 'idle'));
+export interface DashboardProps {
+  status?: DashboardStatus;
+  opportunities?: Opportunity[];
+  itemsAnalyzed?: number;
+  lastUpdated?: number;
+  error?: string | null;
+  selectedItemId?: number | null;
+  onSelectItem?: (itemId: number) => void;
+}
+
+export default function Dashboard({
+  status: statusProp,
+  opportunities = [],
+  itemsAnalyzed = 0,
+  lastUpdated,
+  error: errorProp = null,
+  selectedItemId = null,
+  onSelectItem,
+}: DashboardProps): JSX.Element {
+  const [bridgeStatus, setBridgeStatus] = useState<DashboardStatus>(() =>
+    statusProp ?? (isDesktopBridgeAvailable() ? 'loading' : 'idle'),
+  );
   const [version, setVersion] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [bridgeError, setBridgeError] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
+  const status = statusProp ?? 'idle';
+  const error = errorProp ?? (statusProp !== undefined ? bridgeError : null);
+  const viewModel = buildDashboardViewModel({ opportunities, itemsAnalyzed, lastUpdated });
+
   useEffect(() => {
+    if (statusProp !== undefined) {
+      return;
+    }
     if (!isDesktopBridgeAvailable()) {
       return;
     }
@@ -21,52 +52,50 @@ export default function Dashboard(): JSX.Element {
       .then((v) => {
         if (!cancelled) {
           setVersion(v);
-          setStatus('success');
+          setBridgeStatus('success');
         }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Unknown error');
-          setStatus('error');
+          setBridgeError(err instanceof Error ? err.message : 'Unknown error');
+          setBridgeStatus('error');
         }
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [statusProp]);
 
   return (
     <section aria-label="Market dashboard">
-      <div className="market-summary">
-        <div className="summary-card">
-          <span className="summary-label">Items analyzed</span>
-          <strong>—</strong>
-          <small>Provider arrives in Sprint 2</small>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Opportunities</span>
-          <strong>—</strong>
-          <small>Ranking engine arrives in Sprint 6</small>
-        </div>
-        <div className="summary-card">
-          <span className="summary-label">Last update</span>
-          <strong>—</strong>
-          <small>Scheduler arrives in Sprint 10</small>
-        </div>
-      </div>
+      <MarketSummary summary={viewModel.summary} />
 
       <h2>Top 10 Daily Opportunities</h2>
-      <p className="placeholder">No market data yet — the provider, storage, analytics, and ranking sprints will fill this table.</p>
+      {status === 'loading' && <p className="placeholder">Loading market data…</p>}
+      {status === 'error' && <p className="notice notice-error">{error ?? 'Market data unavailable.'}</p>}
+      {(status === 'idle' || status === 'success') && (
+        <TopOpportunityTable
+          opportunities={viewModel.top10}
+          selectedItemId={selectedItemId}
+          onSelectItem={onSelectItem}
+        />
+      )}
 
       <h2>Desktop bridge</h2>
-      {!bridgeAvailable && <p className="notice">Desktop bridge unavailable — running in browser dev mode. Launch via Electron to test IPC.</p>}
-      {bridgeAvailable && status === 'loading' && <p className="notice">Contacting desktop shell…</p>}
-      {bridgeAvailable && status === 'success' && (
+      {!bridgeAvailable && statusProp === undefined && (
+        <p className="notice">Desktop bridge unavailable — running in browser dev mode. Launch via Electron to test IPC.</p>
+      )}
+      {bridgeAvailable && statusProp === undefined && bridgeStatus === 'loading' && (
+        <p className="notice">Contacting desktop shell…</p>
+      )}
+      {bridgeAvailable && statusProp === undefined && bridgeStatus === 'success' && (
         <p className="notice notice-ok">
           IPC round-trip OK — app version: <strong>{version}</strong>
         </p>
       )}
-      {bridgeAvailable && status === 'error' && <p className="notice notice-error">IPC failed: {error}</p>}
+      {bridgeAvailable && statusProp === undefined && bridgeStatus === 'error' && (
+        <p className="notice notice-error">IPC failed: {bridgeError}</p>
+      )}
     </section>
   );
 }
