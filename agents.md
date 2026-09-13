@@ -4,6 +4,43 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 6 (slice 1) — Ranking weights, presets, opportunity contract (2026-09-12)
+
+**Goal:** start ranking (roadmap scoring) with contracts + weights only —
+no scorer math yet (deferred to slice 2 per review #14 gate).
+
+**Did:**
+- `core/market/ranking/types.ts`: pure contracts — `RankingWeights`,
+  `RankingConfig` (minPrice 100 GP default, minVolume, minHistoryMinutes),
+  `ComponentScores` (six 0–100 components), `Opportunity` UI contract
+  (rank/item/currentPrice/changes/spread/components/estimatedProfit/
+  risk/confidence 0–1/baseScore/finalScore), `RiskLevel`, 5 preset names.
+- `core/market/ranking/weights.ts`: `DEFAULT_WEIGHTS` baseline
+  (Momentum 30 / Liquidity 20 / Spread 20 / Profitability 15 /
+  Consistency 10 / Volatility 5) + 5 presets (BALANCED/CONSERVATIVE/
+  AGGRESSIVE/CHEAP_FLIPS/HIGH_PROFIT, all summing to 1.0);
+  `isValidWeights` (finite, [0,1], sum≈1), `resolveWeights` (defensive copy),
+  `rankingVersionForPreset` → `0.1-<preset>` placeholder (content-aware
+  version + Readonly freeze deferred to slice 2).
+- Tests: `tests/ranking/weights.test.ts` — 5 tests (baseline, all-presets
+  valid, copy-on-resolve, invalid-share rejection, unknown-preset throw).
+
+**Decisions:**
+- Slice-1 is contracts-only by design: scorer.ts/risk.ts/confidence.ts
+  stay absent until the pushed base + docs land (review #14).
+- Cheapness stays a filter, not a weight — CHEAP_FLIPS leans into
+  spread + profitability instead (guide §54).
+- Guide-deviation noted in code: `Opportunity` carries all six component
+  scores plus raw spread gp/percent (guide §31 sketch omits spread from
+  metrics but §32 breakdown needs it).
+
+**Verified:**
+- `npm test`, `npm run typecheck`, `npm run build` green at commit time.
+- Pushed `dbf52eb` to `origin/main` (was ahead-1; now in sync) — unblocks
+  slice-2 scorer/risk/confidence + scenarios A/B/C.
+
+**Commit:** `Sprint 6 (slice 1): ranking weights, presets, and opportunity contract`
+
 ## Sprint 5 — Analytics Engine (2026-09-07)
 
 **Goal:** turn snapshots into useful metrics (roadmap §7).
