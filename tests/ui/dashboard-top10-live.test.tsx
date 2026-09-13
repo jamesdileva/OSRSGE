@@ -68,7 +68,7 @@ describe('Sprint 7 slice-2 dashboard live Top-10 (stub-feed IPC)', () => {
   it('renders the live Top-10 from the mocked bridge feed when no statusProp', async () => {
     const stub = makeStubResponse();
     const fetchTop10 = vi.fn().mockResolvedValue(stub);
-    window.osrsApi = { app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') }, market: { fetchTop10 } };
+    window.osrsApi = { app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') }, market: { fetchTop10, fetchHistory: vi.fn() } };
     render(<Dashboard />);
 
     const table = await screen.findByRole('table', { name: 'Top 10 opportunities' });
@@ -84,7 +84,7 @@ describe('Sprint 7 slice-2 dashboard live Top-10 (stub-feed IPC)', () => {
   it('surfaces Top-10 IPC failures instead of failing silently', async () => {
     window.osrsApi = {
       app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') },
-      market: { fetchTop10: vi.fn().mockRejectedValue(new Error('top10-timeout')) },
+      market: { fetchTop10: vi.fn().mockRejectedValue(new Error('top10-timeout')), fetchHistory: vi.fn() },
     };
     render(<Dashboard />);
 
@@ -96,7 +96,7 @@ describe('Sprint 7 slice-2 dashboard live Top-10 (stub-feed IPC)', () => {
 
   it('preserves the props path when statusProp is defined (no live fetch)', () => {
     const fetchTop10 = vi.fn().mockResolvedValue(makeStubResponse());
-    window.osrsApi = { app: { getVersion: vi.fn() }, market: { fetchTop10 } };
+    window.osrsApi = { app: { getVersion: vi.fn() }, market: { fetchTop10, fetchHistory: vi.fn() } };
     render(<Dashboard status="success" opportunities={[makeOpportunity(7, 42)]} itemsAnalyzed={1} />);
 
     expect(screen.getByText('Live Item 7')).toBeInTheDocument();

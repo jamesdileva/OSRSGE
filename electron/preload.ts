@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { APP_GET_VERSION, MARKET_GET_TOP10 } from '../shared/ipc.js';
-import type { MarketTop10Request, MarketTop10Response, OsrsApi } from '../shared/ipc.js';
+import { APP_GET_VERSION, MARKET_GET_HISTORY, MARKET_GET_TOP10 } from '../shared/ipc.js';
+import type { MarketHistoryRequest, MarketHistoryResponse, MarketTop10Request, MarketTop10Response, OsrsApi } from '../shared/ipc.js';
 
 /**
  * Deliberately small preload bridge (architecture §6, guide §7).
@@ -13,6 +13,8 @@ const api: OsrsApi = {
   market: {
     fetchTop10: (request?: MarketTop10Request) =>
       ipcRenderer.invoke(MARKET_GET_TOP10, request) as Promise<MarketTop10Response>,
+    fetchHistory: (request: MarketHistoryRequest) =>
+      ipcRenderer.invoke(MARKET_GET_HISTORY, request) as Promise<MarketHistoryResponse>,
   },
 };
 

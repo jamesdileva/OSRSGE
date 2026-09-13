@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registerAppHandlers } from './ipc/app.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
-import { getStubTop10Response } from './ipc/marketStub.js';
+import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
 import { startScheduler } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
@@ -34,7 +34,7 @@ function createWindow(): BrowserWindow {
 void app.whenReady().then(() => {
   initializeApplicationServices();
   registerAppHandlers(ipcMain, { getVersion: getApplicationVersion });
-  registerMarketHandlers(ipcMain, { getTop10: (request) => getStubTop10Response(request) });
+  registerMarketHandlers(ipcMain, { getTop10: (request) => getStubTop10Response(request), getHistory: (request) => getStubHistoryResponse(request) });
   createWindow();
   startScheduler();
 

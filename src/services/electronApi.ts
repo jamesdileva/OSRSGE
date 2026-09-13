@@ -1,4 +1,4 @@
-import type { MarketTop10Request, MarketTop10Response, OsrsApi } from '../../shared/ipc.js';
+import type { MarketHistoryRequest, MarketHistoryResponse, MarketTop10Request, MarketTop10Response, OsrsApi } from '../../shared/ipc.js';
 
 /**
  * Sole access point to the preload bridge. Components never touch
@@ -36,4 +36,17 @@ export async function fetchTop10(request?: MarketTop10Request): Promise<MarketTo
     throw new Error('Desktop bridge unavailable');
   }
   return api.market.fetchTop10(request);
+}
+
+/**
+ * Sprint 8 slice-2: stub-first item history via the preload bridge.
+ * Throws when the bridge (or the market surface on a stale preload) is
+ * absent so the Dashboard can fall back to a history-unavailable notice.
+ */
+export async function fetchItemHistory(request: MarketHistoryRequest): Promise<MarketHistoryResponse> {
+  const api = getDesktopApi();
+  if (api?.market == null) {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.market.fetchHistory(request);
 }

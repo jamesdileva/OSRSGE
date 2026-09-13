@@ -4,12 +4,16 @@
  * and bridge types from here so they can never drift apart.
  */
 import type { Opportunity } from '../core/market/ranking/types.js';
+import type { MarketSnapshot } from '../core/market/normalization/normalizer.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
 export const APP_GET_VERSION = 'app:getVersion';
 
 /** Sprint 7 slice-2: stub-feed Top-10 channel (no scheduler, no live pipeline). */
 export const MARKET_GET_TOP10 = 'market:getTop10';
+
+/** Sprint 8 slice-2: stub-first item history channel (no live provider yet). */
+export const MARKET_GET_HISTORY = 'market:getHistory';
 
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
@@ -35,6 +39,31 @@ export interface MarketTop10Response {
 
 export interface OsrsApiMarket {
   fetchTop10(request?: MarketTop10Request): Promise<MarketTop10Response>;
+  /**
+   * Sprint 8 slice-2 stub-first history (D#163 scope guardrail): main
+   * returns a fixture of MarketSnapshot points — never a live
+   * provider/history pipeline. Window is an explicit union (no free-form
+   * strings); points reuse the MarketSnapshot shape (no parallel types).
+   */
+  fetchHistory(request: MarketHistoryRequest): Promise<MarketHistoryResponse>;
+}
+
+/**
+ * Sprint 8 slice-2 history window — explicit union so main/preload/
+ * renderer can never drift (review #54 condition 1).
+ */
+export type HistoryWindow = '24h' | '7d';
+
+export interface MarketHistoryRequest {
+  itemId: number;
+  window: HistoryWindow;
+}
+
+export interface MarketHistoryResponse {
+  itemId: number;
+  window: HistoryWindow;
+  /** Price points, oldest first; reuses the Sprint 3 MarketSnapshot shape. */
+  points: MarketSnapshot[];
 }
 
 export interface OsrsApi {

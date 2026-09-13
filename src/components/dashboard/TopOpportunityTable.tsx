@@ -57,6 +57,17 @@ export default function TopOpportunityTable({
             <tr
               key={opportunity.item.id}
               onClick={onSelectItem ? () => onSelectItem(opportunity.item.id) : undefined}
+              onKeyDown={
+                onSelectItem
+                  ? (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        onSelectItem(opportunity.item.id);
+                      }
+                    }
+                  : undefined
+              }
+              tabIndex={onSelectItem ? 0 : undefined}
               aria-selected={selectedItemId === opportunity.item.id}
               className={selectedItemId === opportunity.item.id ? 'selected' : undefined}
             >

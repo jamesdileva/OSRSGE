@@ -1,4 +1,5 @@
-import type { MarketTop10Request, MarketTop10Response } from '../../shared/ipc.js';
+import type { MarketHistoryRequest, MarketHistoryResponse, MarketTop10Request, MarketTop10Response } from '../../shared/ipc.js';
+import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import type { Opportunity } from '../../core/market/ranking/types.js';
 
 /**
@@ -48,4 +49,27 @@ export function getStubTop10Response(request?: MarketTop10Request): MarketTop10R
     itemsAnalyzed: all.length,
     opportunities: all.slice(0, Math.max(0, limit)),
   };
+}
+
+/**
+ * Sprint 8 slice-2 stub history (D#163 scope guardrail): deterministic
+ * MarketSnapshot fixture — never touches the live provider/history/
+ * scheduler. Points are oldest-first; price trends gently upward so the
+ * pure PriceChart has a visible slope in every window.
+ */
+export function getStubHistoryResponse(request: MarketHistoryRequest): MarketHistoryResponse {
+  const count = request.window === '7d' ? 14 : 12;
+  const now = Date.now();
+  const stepMs = request.window === '7d' ? 12 * 60 * 60 * 1_000 : 2 * 60 * 60 * 1_000;
+  const base = 1000 + (request.itemId % 500);
+  const points: MarketSnapshot[] = Array.from({ length: count }, (_, i) => {
+    const price = base + i * 7 + (request.itemId % 11);
+    return {
+      itemId: request.itemId,
+      timestamp: now - (count - 1 - i) * stepMs,
+      high: price + 12,
+      low: price - 12,
+    };
+  });
+  return { itemId: request.itemId, window: request.window, points };
 }

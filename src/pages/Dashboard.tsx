@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
+import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import type { Opportunity } from '../../core/market/ranking/types.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
 import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
+import PriceChart from '../components/dashboard/PriceChart.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { fetchAppVersion, fetchTop10, getDesktopApi, isDesktopBridgeAvailable } from '../services/electronApi.ts';
+import { fetchAppVersion, fetchItemHistory, fetchTop10, getDesktopApi, isDesktopBridgeAvailable } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -42,13 +44,21 @@ export default function Dashboard({
   const [top10Error, setTop10Error] = useState<string | null>(null);
   // Sprint 8 slice-1: row-click selection. Controlled when selectedItemId
   // is passed, uncontrolled (internal state) otherwise so the live path
-  // works with no props. onSelectItem is always notified.
+  // works with no props. onSelectItem is always notified. Review #54 fix:
+  // only write internal state when uncontrolled (prop is null) so a stale
+  // internal id cannot resurface after a controlled clear.
   const [internalSelectedItemId, setInternalSelectedItemId] = useState<number | null>(null);
   const effectiveSelectedItemId = selectedItemId ?? internalSelectedItemId;
   const handleSelectItem = (itemId: number): void => {
-    setInternalSelectedItemId(itemId);
+    if (selectedItemId == null) {
+      setInternalSelectedItemId(itemId);
+    }
     onSelectItem?.(itemId);
   };
+  // Sprint 8 slice-2: stub-first item history for the selected row.
+  const [historyPoints, setHistoryPoints] = useState<MarketSnapshot[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -56,7 +66,9 @@ export default function Dashboard({
   // props path is unaffected (top10Error is always null when statusProp is
   // defined, bridgeError stays null because the effect returns early), and
   // the old-preload version-only path still falls back to props gracefully.
-  const error = errorProp ?? top10Error ?? bridgeError;
+  // Review #54: history errors join the same chain (errorProp wins, then
+  // history, then Top-10, then bridge) so a failed chart never masks props.
+  const error = errorProp ?? historyError ?? top10Error ?? bridgeError;
   // Props path is preserved for browser-mode + existing tests; the live path
   // overrides only when the bridge delivers a stub feed with no statusProp.
   const effectiveOpportunities = liveOpportunities ?? opportunities;
@@ -123,6 +135,46 @@ export default function Dashboard({
     };
   }, [statusProp]);
 
+  // Sprint 8 slice-2 history path: fetch stub points for the selected item.
+  // Cancelled-flag + captured-id guard drops stale responses on rapid
+  // reselect (review #54 condition 2); stale preloads (market == null) and
+  // bridge-absent browser mode skip silently with history left null.
+  useEffect(() => {
+    if (effectiveSelectedItemId == null) {
+      setHistoryPoints(null);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+    if (getDesktopApi()?.market == null) {
+      setHistoryPoints(null);
+      setHistoryError(null);
+      setHistoryLoading(false);
+      return;
+    }
+    const requestedId = effectiveSelectedItemId;
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    fetchItemHistory({ itemId: requestedId, window: '24h' })
+      .then((response) => {
+        if (!cancelled && response.itemId === requestedId) {
+          setHistoryPoints(response.points);
+          setHistoryLoading(false);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setHistoryError(err instanceof Error ? err.message : 'Unknown error');
+          setHistoryPoints(null);
+          setHistoryLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveSelectedItemId]);
+
   return (
     <section aria-label="Market dashboard">
       <MarketSummary summary={viewModel.summary} />
@@ -141,6 +193,21 @@ export default function Dashboard({
         <>
           <h2>Item details</h2>
           <ItemDetailsPanel opportunity={selectedOpportunity} />
+          {selectedOpportunity !== null && (
+            <>
+              <h3>Price history (24h)</h3>
+              {historyLoading && <p className="placeholder">Loading price history…</p>}
+              {!historyLoading && historyError !== null && (
+                <p className="notice notice-error">History unavailable: {historyError}</p>
+              )}
+              {!historyLoading && historyError === null && historyPoints !== null && (
+                <PriceChart points={historyPoints} itemName={selectedOpportunity.item.name} windowLabel="24h" />
+              )}
+              {!historyLoading && historyError === null && historyPoints === null && (
+                <p className="placeholder">Price history unavailable — launch via Electron to load the chart feed.</p>
+              )}
+            </>
+          )}
         </>
       )}
 

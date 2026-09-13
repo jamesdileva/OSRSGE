@@ -54,15 +54,22 @@ describe('Sprint 8 slice-1 ItemDetailsPanel (pure, props-driven)', () => {
     }
   });
 
-  it('breakdown math reuses scorer multipliers: base × riskMult × confMult == final (D#200 disconfirming check)', () => {
+  it('breakdown math reuses scorer multipliers: rendered ×mults chain base to final (D#200 disconfirming check)', () => {
     const opportunity = makeOpportunity(1, 0, { baseScore: 80, risk: 'HIGH', confidence: 0.5 });
-    opportunity.finalScore = opportunity.baseScore * riskMultiplier(opportunity.risk) * confidenceMultiplier(opportunity.confidence);
+    const riskMult = riskMultiplier(opportunity.risk);
+    const confMult = confidenceMultiplier(opportunity.confidence);
+    opportunity.finalScore = opportunity.baseScore * riskMult * confMult;
     render(<ItemDetailsPanel opportunity={opportunity} />);
-    expect(opportunity.finalScore).toBeCloseTo(
-      opportunity.baseScore * riskMultiplier('HIGH') * confidenceMultiplier(0.5),
-      10,
-    );
-    expect(screen.getByRole('table', { name: 'Score breakdown' })).toBeInTheDocument();
+    // Rendered multiplier text must match the scorer (not a reimplementation).
+    expect(screen.getByText(`(×${riskMult.toFixed(2)})`)).toBeInTheDocument();
+    expect(screen.getByText(`(×${confMult.toFixed(3)})`, { exact: false })).toBeInTheDocument();
+    // Displayed Base × displayed mults ≈ displayed Final within rounding.
+    const table = screen.getByRole('table', { name: 'Score breakdown' });
+    const baseCell = within(table).getByText(opportunity.baseScore.toFixed(1));
+    const finalCell = within(table).getByText(opportunity.finalScore.toFixed(1));
+    const displayedBase = Number(baseCell.textContent);
+    const displayedFinal = Number(finalCell.textContent);
+    expect(displayedBase * riskMult * confMult).toBeCloseTo(displayedFinal, 0);
   });
 
   it('Dashboard row-click selects an item and shows details (props path)', async () => {
