@@ -4,6 +4,47 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 11 (slice 1) — Pure watchlist store + JSON persistence (2026-09-13)
+
+**Goal:** first watchlist surface (roadmap §13, mail #99): pure store
+contract + local persistence (add/remove/price/change/spread/risk inputs
+carried as IDs only), zero UI/charts/alerts/scheduler.
+
+**Did:**
+- `core/watchlist/watchlist.ts` (new, pure): `WatchlistEntry`
+  (itemId/addedAt) + `isValidWatchlistEntry` guard +
+  `createWatchlist`/`addToWatchlist`/`removeFromWatchlist`/`isWatched`/
+  `watchlistIds`. Re-add is a no-op preserving original addedAt+position
+  (first-watch wins); all mutating ops return fresh arrays, never mutate
+  inputs (frozen-input safe); `nowMs` explicit (no Date.now, matching the
+  S10 scheduler convention); garbage ids (≤0/non-integer/NaN) and
+  non-finite timestamps throw.
+- `core/watchlist/WatchlistRepository.ts` (new): `load`/`save`
+  interface — callers never touch JSON directly so the roadmap §17
+  `watchlist` SQLite table can replace the backend untouched.
+- `storage/paths.ts`: `watchlistFile(baseDir)` (`<baseDir>/watchlist.json`).
+- `storage/json/JsonWatchlistRepository.ts` (new): whole-list document,
+  atomic tmp+rename writes (mirroring `JsonHistoryRepository`), tolerant
+  reads (missing/corrupt/non-array → [], invalid records skipped),
+  strict saves (invalid entries throw, previous good document intact).
+- Tests: `tests/watchlist/watchlist.test.ts` (8: empty/seed copy, append,
+  re-add preserves addedAt+position, remove + unknown-id fresh array,
+  membership, invalid rejection, frozen-input purity, no-alias copies) +
+  `tests/watchlist/watchlistRepository.test.ts` (4: load-missing [],
+  round-trip order + overwrite, corrupt/non-array/invalid tolerance,
+  no-.tmp-leftover + failed save preserves good doc) — 175 total.
+
+**Decisions:**
+- Slice-1 stores IDs only by design: price/change/spread/risk are derived
+  at view time from `Opportunity[]`/snapshots (slice-2), never persisted.
+- No size cap: the roadmap sets none, so none is invented.
+- Strict-write/tolerant-read split mirrors the S2/S3
+  provider/normalizer boundary.
+
+**Verified:**
+- `npm test` → 34 files, 175/175 pass (zero network).
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+
 ## Sprint 10 (slice 2) — Scheduler runtime: timers + single-flight + manual refresh + notify (2026-09-13)
 
 **Goal:** second auto-refresh surface (roadmap §12, guide §§41–43): timer
