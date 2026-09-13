@@ -1,4 +1,11 @@
-import type { MarketHistoryRequest, MarketHistoryResponse, MarketTop10Request, MarketTop10Response, OsrsApi } from '../../shared/ipc.js';
+import type {
+  MarketHistoryRequest,
+  MarketHistoryResponse,
+  MarketRefreshUpdate,
+  MarketTop10Request,
+  MarketTop10Response,
+  OsrsApi,
+} from '../../shared/ipc.js';
 
 /**
  * Sole access point to the preload bridge. Components never touch
@@ -49,4 +56,31 @@ export async function fetchItemHistory(request: MarketHistoryRequest): Promise<M
     throw new Error('Desktop bridge unavailable');
   }
   return api.market.fetchHistory(request);
+}
+
+/**
+ * Sprint 10 slice-2 manual refresh: invokes one scheduler refresh now via
+ * the preload bridge. Throws when the bridge (or the market surface on a
+ * stale preload) is absent so callers can fall back. Stale-preload guard
+ * mirrors fetchTop10/fetchItemHistory.
+ */
+export async function triggerManualRefresh(): Promise<MarketRefreshUpdate> {
+  const api = getDesktopApi();
+  if (api?.market == null || typeof api.market.triggerRefreshNow !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.market.triggerRefreshNow();
+}
+
+/**
+ * Sprint 10 slice-2 push subscription: fires after every scheduler
+ * refresh. Returns the preload unsubscribe for caller-owned cleanup.
+ * Throws when the bridge is absent or stale.
+ */
+export function subscribeToRefreshUpdates(listener: (update: MarketRefreshUpdate) => void): () => void {
+  const api = getDesktopApi();
+  if (api?.market == null || typeof api.market.onRefreshUpdated !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.market.onRefreshUpdated(listener);
 }

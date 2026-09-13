@@ -16,6 +16,15 @@ export const MARKET_GET_TOP10 = 'market:getTop10';
 /** Sprint 8 slice-2: stub-first item history channel (no live provider yet). */
 export const MARKET_GET_HISTORY = 'market:getHistory';
 
+/**
+ * Sprint 10 slice-2: manual-refresh trigger (renderer invoke → main runs
+ * one scheduler refresh now, bypassing the due check) and schedule-update
+ * push (main → renderer after every refresh). Payload is schedule state
+ * only — no market data rides this channel (stub-only data, D#163).
+ */
+export const MARKET_REFRESH_NOW = 'market:refreshNow';
+export const MARKET_REFRESH_UPDATED = 'market:refreshUpdated';
+
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
   getVersion(): Promise<string>;
@@ -55,6 +64,21 @@ export interface OsrsApiMarket {
    * strings); points reuse the MarketSnapshot shape (no parallel types).
    */
   fetchHistory(request: MarketHistoryRequest): Promise<MarketHistoryResponse>;
+  /**
+   * Sprint 10 slice-2 manual refresh: invokes one scheduler refresh now
+   * (single-flight shared with timer ticks) and resolves with the fresh
+   * schedule snapshot. Stub-only data — never a live pipeline. Optional
+   * so a stale preload predating slice-2 still typechecks; the renderer
+   * keeps a runtime `typeof !== 'function'` guard (S7/S8 precedent).
+   */
+  triggerRefreshNow?: () => Promise<MarketRefreshUpdate>;
+  /**
+   * Sprint 10 slice-2 push subscription: listener fires after every
+   * scheduler refresh with the fresh schedule snapshot. Returns an
+   * unsubscribe function; the renderer owns cleanup. Optional for the
+   * same stale-preload reason as triggerRefreshNow.
+   */
+  onRefreshUpdated?: (listener: (update: MarketRefreshUpdate) => void) => () => void;
 }
 
 /**
@@ -73,6 +97,18 @@ export interface MarketHistoryResponse {
   window: HistoryWindow;
   /** Price points, oldest first; reuses the Sprint 3 MarketSnapshot shape. */
   points: MarketSnapshot[];
+}
+
+/**
+ * Sprint 10 slice-2 schedule snapshot: pushed after every refresh and
+ * returned by the manual-refresh trigger. Schedule state only — the
+ * renderer re-fetches Top-10 itself when it cares about data.
+ */
+export interface MarketRefreshUpdate {
+  nextRunAt: number;
+  consecutiveFailures: number;
+  lastRunAt?: number;
+  lastSuccessAt?: number;
 }
 
 export interface OsrsApi {
