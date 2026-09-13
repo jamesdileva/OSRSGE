@@ -26,8 +26,9 @@ export async function fetchAppVersion(): Promise<string> {
 
 /**
  * Sprint 7 slice-2 live path: stub-feed Top-10 via the preload bridge.
- * Throws when the bridge or the market surface is absent so the Dashboard
- * can fall back to props (browser dev mode / old preload stay working).
+ * Throws when the bridge is absent so the Dashboard can fall back to props
+ * (browser dev mode stays working). The `market == null` runtime guard is
+ * kept for stale preloads predating the required market surface.
  */
 export async function fetchTop10(request?: MarketTop10Request): Promise<MarketTop10Response> {
   const api = getDesktopApi();

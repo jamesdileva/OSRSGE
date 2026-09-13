@@ -42,7 +42,11 @@ export default function Dashboard({
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
-  const error = errorProp ?? (statusProp !== undefined ? bridgeError : null);
+  // Live Top-10 detail surfaces in the main error paragraph (review #43);
+  // props path is unaffected (top10Error is always null when statusProp is
+  // defined, bridgeError stays null because the effect returns early), and
+  // the old-preload version-only path still falls back to props gracefully.
+  const error = errorProp ?? top10Error ?? bridgeError;
   // Props path is preserved for browser-mode + existing tests; the live path
   // overrides only when the bridge delivers a stub feed with no statusProp.
   const effectiveOpportunities = liveOpportunities ?? opportunities;

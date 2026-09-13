@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from '../../src/App.tsx';
+import type { OsrsApi } from '../../shared/ipc.ts';
 
 afterEach(() => {
   cleanup();
@@ -18,7 +19,9 @@ describe('App shell', () => {
   });
 
   it('shows the app version after a successful IPC round-trip', async () => {
-    window.osrsApi = { app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') } };
+    // Old-preload shape (no market surface) by design — cast keeps the
+    // runtime fallback covered now that OsrsApi.market is required.
+    window.osrsApi = { app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') } } as unknown as OsrsApi;
     render(<App />);
 
     expect(await screen.findByText(/IPC round-trip OK/)).toBeInTheDocument();
@@ -36,10 +39,12 @@ describe('App shell', () => {
       app: {
         getVersion: vi.fn().mockRejectedValue(new Error('timeout')),
       },
-    };
+    } as unknown as OsrsApi;
     render(<App />);
 
     expect(await screen.findByText(/IPC failed/)).toBeInTheDocument();
-    expect(await screen.findByText(/timeout/)).toBeInTheDocument();
+    // Main error paragraph now also carries the detail (review #43), so
+    // the text matches twice — assert on all matches instead of one.
+    expect((await screen.findAllByText(/timeout/)).length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -1,7 +1,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Dashboard from '../../src/pages/Dashboard.tsx';
-import type { MarketTop10Response } from '../../shared/ipc.ts';
+import type { MarketTop10Response, OsrsApi } from '../../shared/ipc.ts';
 import { MARKET_GET_TOP10 } from '../../shared/ipc.ts';
 import type { Opportunity } from '../../core/market/ranking/types.js';
 
@@ -88,8 +88,10 @@ describe('Sprint 7 slice-2 dashboard live Top-10 (stub-feed IPC)', () => {
     };
     render(<Dashboard />);
 
-    expect(await screen.findByText(/Market data unavailable/)).toBeInTheDocument();
-    expect(await screen.findByText(/top10-timeout/)).toBeInTheDocument();
+    // Review #43: the Top-10 detail surfaces in the main error paragraph
+    // (not just the generic fallback) plus the footer line.
+    const errors = await screen.findAllByText(/top10-timeout/);
+    expect(errors.length).toBeGreaterThanOrEqual(2);
   });
 
   it('preserves the props path when statusProp is defined (no live fetch)', () => {
@@ -102,7 +104,9 @@ describe('Sprint 7 slice-2 dashboard live Top-10 (stub-feed IPC)', () => {
   });
 
   it('falls back to the version-only path when the market surface is missing (old preload)', async () => {
-    window.osrsApi = { app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') } };
+    // Old-preload shape by design — cast keeps the runtime fallback covered
+    // now that OsrsApi.market is required.
+    window.osrsApi = { app: { getVersion: vi.fn().mockResolvedValue('0.1.0-test') } } as unknown as OsrsApi;
     render(<Dashboard />);
 
     expect(await screen.findByText(/IPC round-trip OK/)).toBeInTheDocument();

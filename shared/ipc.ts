@@ -40,9 +40,10 @@ export interface OsrsApiMarket {
 export interface OsrsApi {
   app: OsrsApiApp;
   /**
-   * Optional until the main/preload stub lands (agent-b, task #7).
-   * Renderer treats a missing market as "old preload" and falls back to
-   * the props path so Sprint 1 bridge tests stay green.
+   * Required since the slice-2 main/preload stub landed (agent-b 7317cfa,
+   * review #43). Renderer keeps a runtime old-preload guard
+   * (`getDesktopApi()?.market == null`) so a stale preload without the
+   * market surface still falls back to the props path.
    */
-  market?: OsrsApiMarket;
+  market: OsrsApiMarket;
 }
