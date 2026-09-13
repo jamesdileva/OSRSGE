@@ -4,6 +4,52 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 7 (slice 2) — Live dashboard IPC wiring, stub feed (2026-09-13)
+
+**Goal:** prove the main → preload → renderer Top-10 round-trip
+(roadmap §9 live path) behind a stub feed — no provider/scorer/history/
+scheduler yet (D#163 scope guardrail, task #7 with agent-b).
+
+**Did:**
+- `shared/ipc.ts`: `MarketTop10Request/Response` + `OsrsApiMarket`
+  contracts; `market` required since the stub landed (agent-b 7317cfa,
+  review #43 follow-up f1caed2) — renderer keeps a runtime
+  `market == null` old-preload guard so stale preloads still fall back
+  to the props path.
+- `electron/ipc/marketStub.ts` + `market.handlers.ts` (wired in
+  `main.ts`, exposed in `preload.ts`): fixed unsorted 3-item fixture
+  (`STUB_RANKING_VERSION='0.2-BALANCED-stub'`), `limit`-aware slice —
+  never touches live provider/scorer/history/scheduler.
+- `src/services/electronApi.ts`: `fetchTop10` — throws when bridge
+  absent (browser dev mode falls back to props); `market == null`
+  guard kept for stale preloads.
+- `src/pages/Dashboard.tsx`: live path fetches stub Top-10 when bridge
+  available and no `statusProp`; error precedence
+  `errorProp ?? top10Error ?? bridgeError` with Top-10 detail in the
+  main error paragraph (review #43); props path unaffected (effect
+  early-returns on `statusProp`); renderer sorts via the shared
+  slice-1 view-model.
+- Tests: `dashboard-top10-live.test.tsx` (renderer live/sort/fallback/
+  error-detail) + `tests/ipc/market.test.ts` (stub contract) —
+  10 new, 106 total.
+
+**Decisions:**
+- Stub-first by design: proves IPC wiring before the live pipeline;
+  live ranking arrives in later sprints.
+- Renderer-side sort keeps single sort ownership in
+  `buildDashboardViewModel` (stub deliberately unsorted).
+- Known nit (non-gating, review #45): version-fetch and top10-fetch
+  share one bridgeStatus, so a version-fail + top10-success race
+  resolves nondeterministically; both-fail is safely error either way.
+
+**Verified:**
+- `npm test` → 25 files, 106/106 pass (zero network).
+- `npm run typecheck` + `npm run build` green (workspace clean).
+- Review #44 CLEAR on code; review #45 close-out (push + this worklog).
+
+**Commits:** `56a4df5` renderer live path, `7317cfa` main/preload stub,
+`f1caed2` review #43 follow-up (market required + error detail).
+
 ## Sprint 7 (slice 1) — Pure dashboard Top-10 + summary (2026-09-13)
 
 **Goal:** first visible ranking surface (roadmap §9): props-driven Top-10
