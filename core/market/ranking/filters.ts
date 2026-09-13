@@ -51,6 +51,81 @@ export const DEFAULT_FILTERS: Required<
   minScore: 0,
 };
 
+/**
+ * Sprint 9 slice-2: IPC-safe wire form of `OpportunityFilters` (roadmap §11).
+ * `structuredClone`/JSON over IPC turns `Infinity` into `null`, so the wire
+ * uses `maxPrice: null` for "no upper bound" and the codec maps it back to
+ * `Number.POSITIVE_INFINITY`. All other fields pass through unchanged
+ * (defensive copies for `allowedRisks`). `category` stays a no-op on both
+ * sides. Pure — no IPC/scheduler/UI/network.
+ */
+export interface OpportunityFiltersWire {
+  membership?: MembershipFilter;
+  minPrice?: number;
+  /** `null` means unbounded (Infinity); `undefined`/absent means unfiltered. */
+  maxPrice?: number | null;
+  allowedRisks?: readonly RiskLevel[];
+  minLiquidity?: number;
+  minScore?: number;
+  category?: string;
+}
+
+/** Encode domain filters to the IPC wire form (Infinity → null). */
+export function encodeFiltersForIpc(filters: OpportunityFilters = {}): OpportunityFiltersWire {
+  const wire: OpportunityFiltersWire = {};
+  if (filters.membership !== undefined) {
+    wire.membership = filters.membership;
+  }
+  if (filters.minPrice !== undefined) {
+    wire.minPrice = filters.minPrice;
+  }
+  if (filters.maxPrice !== undefined) {
+    wire.maxPrice =
+      filters.maxPrice === Number.POSITIVE_INFINITY ? null : filters.maxPrice;
+  }
+  if (filters.allowedRisks !== undefined) {
+    wire.allowedRisks = [...filters.allowedRisks];
+  }
+  if (filters.minLiquidity !== undefined) {
+    wire.minLiquidity = filters.minLiquidity;
+  }
+  if (filters.minScore !== undefined) {
+    wire.minScore = filters.minScore;
+  }
+  if (filters.category !== undefined) {
+    wire.category = filters.category;
+  }
+  return wire;
+}
+
+/** Decode wire filters back to the domain form (null → Infinity). */
+export function decodeFiltersFromIpc(wire: OpportunityFiltersWire = {}): OpportunityFilters {
+  const filters: OpportunityFilters = {};
+  if (wire.membership !== undefined) {
+    filters.membership = wire.membership;
+  }
+  if (wire.minPrice !== undefined) {
+    filters.minPrice = wire.minPrice;
+  }
+  if (wire.maxPrice !== undefined) {
+    filters.maxPrice =
+      wire.maxPrice === null ? Number.POSITIVE_INFINITY : wire.maxPrice;
+  }
+  if (wire.allowedRisks !== undefined) {
+    filters.allowedRisks = [...wire.allowedRisks];
+  }
+  if (wire.minLiquidity !== undefined) {
+    filters.minLiquidity = wire.minLiquidity;
+  }
+  if (wire.minScore !== undefined) {
+    filters.minScore = wire.minScore;
+  }
+  if (wire.category !== undefined) {
+    filters.category = wire.category;
+  }
+  return filters;
+}
+
 /** Pure predicate: true when the opportunity survives every active filter. */
 export function matchesFilters(
   opportunity: Opportunity,

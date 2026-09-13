@@ -4,6 +4,7 @@
  * and bridge types from here so they can never drift apart.
  */
 import type { Opportunity } from '../core/market/ranking/types.js';
+import type { OpportunityFiltersWire } from '../core/market/ranking/filters.js';
 import type { MarketSnapshot } from '../core/market/normalization/normalizer.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
@@ -28,6 +29,14 @@ export interface OsrsApiApp {
  */
 export interface MarketTop10Request {
   limit?: number;
+  /**
+   * Sprint 9 slice-2: optional IPC-safe view filters (wire form —
+   * `maxPrice: null` means unbounded/Infinity). Main applies them as a
+   * post-rank view filter over the stub fixture; the renderer also applies
+   * the domain form instantly client-side, so this param proves the
+   * null-safe round-trip without triggering refetches (no scheduler).
+   */
+  filters?: OpportunityFiltersWire;
 }
 
 export interface MarketTop10Response {

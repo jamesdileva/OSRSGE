@@ -4,6 +4,58 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 9 (slice 2) — Filter presets/UI + Infinity-null IPC (2026-09-13)
+
+**Goal:** second filtering surface (roadmap §11): IPC-safe filter round-trip
+(`Infinity`↔`null`), stub post-rank filtering, and instant client-side filter
+UI with zero scheduler/network.
+
+**Did:**
+- `core/market/ranking/filters.ts`: `OpportunityFiltersWire` (wire form —
+  `maxPrice: null` means unbounded) + pure `encodeFiltersForIpc`
+  (Infinity→null) / `decodeFiltersFromIpc` (null→Infinity) with defensive
+  `allowedRisks` copies; scorer/risk/confidence/`isCandidate` untouched.
+- `shared/ipc.ts`: `MarketTop10Request.filters?: OpportunityFiltersWire` —
+  main applies it as a post-rank view filter; renderer also applies the
+  domain form instantly client-side (no refetch, no scheduler).
+- `electron/ipc/marketStub.ts`: `getStubTop10Response` decodes wire filters
+  via the shared codec and applies `applyFilters` before the limit slice
+  (limit caps the filtered view); `itemsAnalyzed` stays the unfiltered
+  fixture size — still never touches live provider/scorer/history/scheduler.
+- `src/components/dashboard/FilterBar.tsx` (new, pure): props-driven
+  membership/min/max-price/risk/min-liquidity/min-score controls; empty
+  max-price = unbounded (Infinity, wire null); every edit calls `onChange`
+  synchronously (instant, zero IPC/scheduler/network).
+- `src/pages/Dashboard.tsx`: `filters` state + `applyFilters` before the
+  view-model (filtered view ranked 1..k for display; pure-layer gaps
+  preserved underneath); initial live fetch sends the pass-everything
+  baseline in wire form (`DEFAULT_FILTERS`, `maxPrice: null`) once to prove
+  the null-safe round-trip; effect deps exclude `filters` so edits never
+  refetch; FilterBar rendered on idle/success.
+- Tests: `tests/ranking/filterWire.test.ts` (7: encode Infinity→null,
+  decode null→Infinity, DEFAULT round-trip through JSON, stub risk/price
+  filtering, limit-caps-view, handler forwards filters) +
+  `tests/ui/filters-view.test.tsx` (5: default unfiltered, membership
+  instant zero-IPC, risk instant + empty-allowlist pass-all, min/max-price
+  instant + clear-means-unbounded, live wire baseline once + no refetch);
+  scoped the S7 `dashboard-top10` HIGH/LOW asserts to the table (FilterBar
+  also renders those labels) — 146 total.
+
+**Decisions:**
+- Slice-2 does wire + stub + instant view only: no preset-weight changes,
+  no scheduler (S10), no live pipeline, scorer/risk/confidence untouched.
+- Pre/post-rank split documented in code: `isCandidate` stays the pre-rank
+  gate; `applyFilters` is the post-rank view; the Dashboard filters the
+  live/props snapshot client-side then re-ranks 1..k for display.
+- `itemsAnalyzed` intentionally unfiltered so the summary distinguishes
+  universe from view.
+
+**Verified:**
+- `npm test` → 30 files, 146/146 pass (zero network).
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green
+  (`dist-electron/core/market/ranking/filters.js` emitted — the stub's
+  runtime codec import resolves).
+
 ## Sprint 9 (slice 1) — Pure opportunity filters (2026-09-13)
 
 **Goal:** first filtering surface (roadmap §11): pure post-rank

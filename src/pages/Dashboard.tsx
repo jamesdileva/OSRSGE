@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import type { Opportunity } from '../../core/market/ranking/types.js';
+import { DEFAULT_FILTERS, applyFilters, encodeFiltersForIpc } from '../../core/market/ranking/filters.js';
+import type { OpportunityFilters } from '../../core/market/ranking/filters.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
+import FilterBar from '../components/dashboard/FilterBar.tsx';
 import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
 import PriceChart from '../components/dashboard/PriceChart.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
@@ -55,6 +58,11 @@ export default function Dashboard({
     }
     onSelectItem?.(itemId);
   };
+  // Sprint 9 slice-2: instant view filters. Client-side only — edits call
+  // setFilters synchronously and re-render via applyFilters below; the
+  // effect deps stay [statusProp]/[effectiveSelectedItemId] so filter edits
+  // never trigger IPC refetches or scheduler work.
+  const [filters, setFilters] = useState<OpportunityFilters>({});
   // Sprint 8 slice-2: stub-first item history for the selected row.
   const [historyPoints, setHistoryPoints] = useState<MarketSnapshot[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -74,8 +82,14 @@ export default function Dashboard({
   const effectiveOpportunities = liveOpportunities ?? opportunities;
   const effectiveItemsAnalyzed = liveItemsAnalyzed ?? itemsAnalyzed;
   const effectiveLastUpdated = liveComputedAt ?? lastUpdated;
+  // Sprint 9 slice-2 instant view: post-rank view filter applied
+  // client-side BEFORE the view-model sorts+ranks, so the displayed Top-10
+  // is the filtered view ranked 1..k. (The pure applyFilters preserves gaps
+  // on already-ranked arrays; the Dashboard re-ranks the filtered view for
+  // display — isCandidate stays the pre-rank gate upstream.)
+  const filteredOpportunities = applyFilters(effectiveOpportunities, filters);
   const viewModel = buildDashboardViewModel({
-    opportunities: effectiveOpportunities,
+    opportunities: filteredOpportunities,
     itemsAnalyzed: effectiveItemsAnalyzed,
     lastUpdated: effectiveLastUpdated,
   });
@@ -115,7 +129,11 @@ export default function Dashboard({
         cancelled = true;
       };
     }
-    fetchTop10()
+    // Sprint 9 slice-2: the initial live fetch carries the pass-everything
+    // baseline in wire form (DEFAULT_FILTERS encodes maxPrice Infinity as
+    // null) to prove the null-safe round-trip. Later filter edits stay
+    // client-side and never refetch (effect deps exclude `filters`).
+    fetchTop10({ filters: encodeFiltersForIpc(DEFAULT_FILTERS) })
       .then((response) => {
         if (!cancelled) {
           setLiveOpportunities(response.opportunities);
@@ -180,6 +198,9 @@ export default function Dashboard({
       <MarketSummary summary={viewModel.summary} />
 
       <h2>Top 10 Daily Opportunities</h2>
+      {(status === 'idle' || status === 'success') && (
+        <FilterBar filters={filters} onChange={setFilters} />
+      )}
       {status === 'loading' && <p className="placeholder">Loading market data…</p>}
       {status === 'error' && <p className="notice notice-error">{error ?? 'Market data unavailable.'}</p>}
       {(status === 'idle' || status === 'success') && (

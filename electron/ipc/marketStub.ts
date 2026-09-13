@@ -1,6 +1,7 @@
 import type { MarketHistoryRequest, MarketHistoryResponse, MarketTop10Request, MarketTop10Response } from '../../shared/ipc.js';
 import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import type { Opportunity } from '../../core/market/ranking/types.js';
+import { applyFilters, decodeFiltersFromIpc } from '../../core/market/ranking/filters.js';
 
 /**
  * Sprint 7 slice-2 stub feed (D#163 scope guardrail).
@@ -42,12 +43,22 @@ function stubOpportunities(): Opportunity[] {
 
 export function getStubTop10Response(request?: MarketTop10Request): MarketTop10Response {
   const all = stubOpportunities();
-  const limit = request?.limit ?? all.length;
+  // Sprint 9 slice-2: optional post-rank view filter over the stub fixture
+  // (D#163 — still never touches the live provider/scorer/history/
+  // scheduler). Wire `maxPrice: null` decodes to Infinity via the shared
+  // codec; filtering runs before the limit slice so `limit` caps filtered
+  // rows. `itemsAnalyzed` stays the unfiltered fixture size so the renderer
+  // summary can distinguish universe from view.
+  const filtered =
+    request?.filters !== undefined
+      ? applyFilters(all, decodeFiltersFromIpc(request.filters))
+      : all;
+  const limit = request?.limit ?? filtered.length;
   return {
     rankingVersion: STUB_RANKING_VERSION,
     computedAt: Date.now(),
     itemsAnalyzed: all.length,
-    opportunities: all.slice(0, Math.max(0, limit)),
+    opportunities: filtered.slice(0, Math.max(0, limit)),
   };
 }
 

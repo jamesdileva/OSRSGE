@@ -51,8 +51,9 @@ describe('Sprint 7 slice-1 dashboard Top-10', () => {
     expect(within(rows[0]).getByText('Item 2')).toBeInTheDocument();
     expect(within(rows[1]).getByText('Item 3')).toBeInTheDocument();
     expect(within(rows[2]).getByText('Item 1')).toBeInTheDocument();
-    expect(screen.getByText(/HIGH/)).toBeInTheDocument();
-    expect(screen.getByText(/LOW/)).toBeInTheDocument();
+    // Scoped to the table: the S9 slice-2 FilterBar also renders HIGH/LOW labels.
+    expect(within(table).getByText(/HIGH/)).toBeInTheDocument();
+    expect(within(table).getByText(/LOW/)).toBeInTheDocument();
   });
 
   it('renders the empty state when there are no opportunities', () => {
