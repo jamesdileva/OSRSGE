@@ -4,6 +4,62 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 10 (slice 2) — Scheduler runtime: timers + single-flight + manual refresh + notify (2026-09-13)
+
+**Goal:** second auto-refresh surface (roadmap §12, guide §§41–43): timer
+runtime on the slice-1 pure core + manual-refresh trigger + renderer
+notify channel, still stub-only data (mail #94 scope).
+
+**Did:**
+- `electron/services/scheduler.ts`: `startScheduler(config?, deps?)` now
+  builds a real runtime (singleton, `stopScheduler()` stops it):
+  due-gated `setTimeout` loop (`msUntilNextRun` delay; quiet ticks just
+  reschedule), single-flight lock reusing the S4 `SnapshotService`
+  pattern (concurrent ticks + manual triggers share one in-flight
+  refresh), `handle.refreshNow()` manual trigger bypassing the due
+  check, `notify(update)` after every refresh; default refresh is a
+  no-op success (stub-only data, D#163 — live pipeline plugs in as the
+  `refresh` dep). Clock/timers injectable (`now/schedule/cancel`) so
+  tests use fakes, zero real timers; public timer handle is opaque
+  `unknown` (DOM-number vs Node-Timeout interop).
+- Nits fixed: `assertNowMs` in `isRefreshDue`/`msUntilNextRun`/
+  `markRefreshSuccess`/`markRefreshFailure` (non-finite throws —
+  disconfirmed `markRefreshFailure(NaN)`); `resolveMaxBackoff`
+  documented — cap never sleeps less than one interval (explicit
+  maxBackoff clamps UP to interval; interval > 1h lifts the default).
+- Jitter decision: NO jitter — single desktop client, no
+  thundering-herd; jitter would blur the 1x/2x/4x backoff math for zero
+  availability gain (documented in code).
+- IPC notify + manual trigger (zero UI creep): `MARKET_REFRESH_NOW`
+  (invoke → one refresh, resolves schedule snapshot) +
+  `MARKET_REFRESH_UPDATED` (push after every refresh, schedule state
+  only — no market data); `MarketRefreshUpdate` in `shared/ipc.ts`;
+  preload exposes `triggerRefreshNow`/`onRefreshUpdated` (unsubscribe
+  via `removeListener`); `electronApi.ts` adds `triggerManualRefresh`/
+  `subscribeToRefreshUpdates` with bridge-absent + stale-preload guards
+  (new bridge methods optional in the type for the same stale-preload
+  reason); `main.ts` wires `notify → webContents.send` + registers the
+  manual-trigger handler. Dashboard untouched (no status-line UI yet).
+- Tests: `tests/scheduler/schedulerRuntime.test.ts` — 8 tests (NaN-nowMs
+  ×4 helpers, >1h ceiling lift + clamp-up, due/quiet tick + success
+  reschedule + notify, failure streak + 1x/2x backoff + notify, single
+  flight, manual-bypass + stop-cancel, channel names, renderer
+  bridge/stale/delegate guards) — 162 total.
+
+**Decisions:**
+- Slice-2 stays stub-only by design: no live provider/scorer/history
+  pipeline, no Dashboard status-line UI, S9 presets remain live-scorer
+  carry.
+- New bridge methods optional (not required like `market` in S7): old
+  preloads without them still typecheck; runtime `typeof` guards stay.
+- Opaque-`unknown` timer handles with wrapped defaults after the first
+  typecheck caught the DOM-number vs Node-Timeout split.
+
+**Verified:**
+- `npm test` → 32 files, 162/162 pass (zero network/timers).
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green
+  (`lint` shows only the pre-existing Dashboard set-state warning).
+
 ## Sprint 10 (slice 1) — Pure scheduler timing core (2026-09-13)
 
 **Goal:** first auto-refresh surface (roadmap §12, guide §§41–43): pure
