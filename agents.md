@@ -4,6 +4,39 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 8 (slice 1) — Pure ItemDetailsPanel + score breakdown (2026-09-13)
+
+**Goal:** first explainability surface (roadmap §10, guide §32): props-driven
+item details + Base→Final breakdown, zero IPC/chart/history (D#200 scope
+guardrail, task #8).
+
+**Did:**
+- `src/components/dashboard/ItemDetailsPanel.tsx` (new, pure): name/id/price,
+  1h/6h/24h, spread gp+pct, liquidity/volatility component scores, estimated
+  profit, risk text+arrow with ×riskMult, confidence % with ×confMult,
+  six-component + Base/Final breakdown table; multipliers imported from
+  `risk.ts`/`confidence.ts` (never reimplemented); null → "Select an item"
+  empty state.
+- `TopOpportunityTable.tsx`: selected-row `aria-selected` + `selected` class;
+  S8 placeholder paragraph removed (details now live in Dashboard).
+- `Dashboard.tsx`: internal selection state (controlled via `selectedItemId`
+  prop, uncontrolled otherwise so the live stub path works with no props);
+  `onSelectItem` always notified; renders "Item details" + panel below the
+  table on idle/success with non-empty Top-10 (both props and live paths).
+- Tests: `tests/ui/item-details.test.tsx` — 6 tests (empty state, fields,
+  all-six+Base/Final rows, base×riskMult×confMult==final disconfirming
+  check, row-click select + controlled-id paths), 112 total.
+
+**Decisions:**
+- Slice-1 stays pure by design: no `market:getItemHistory`, no chart.js
+  (slice-2), no filters/presets (S9), no scheduler (S10), stub-only live
+  data (D#163).
+- Carry nits: bridgeStatus version/top10 race; profit rho 0.9819 watch S14.
+
+**Verified:**
+- `npm test` → 26 files, 112/112 pass (zero network).
+- `npm run typecheck` + `npm run build` green (workspace clean).
+
 ## Sprint 7 (slice 2) — Live dashboard IPC wiring, stub feed (2026-09-13)
 
 **Goal:** prove the main → preload → renderer Top-10 round-trip

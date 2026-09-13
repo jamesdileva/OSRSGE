@@ -23,7 +23,6 @@ function formatGp(value: number | undefined): string {
 
 export interface TopOpportunityTableProps {
   opportunities: Opportunity[];
-  /** S8 placeholder: selected row id only, no details logic lives here. */
   selectedItemId?: number | null;
   onSelectItem?: (itemId: number) => void;
 }
@@ -58,6 +57,8 @@ export default function TopOpportunityTable({
             <tr
               key={opportunity.item.id}
               onClick={onSelectItem ? () => onSelectItem(opportunity.item.id) : undefined}
+              aria-selected={selectedItemId === opportunity.item.id}
+              className={selectedItemId === opportunity.item.id ? 'selected' : undefined}
             >
               <td>{opportunity.rank || index + 1}</td>
               <td>{opportunity.item.name}</td>
@@ -77,9 +78,6 @@ export default function TopOpportunityTable({
           ))}
         </tbody>
       </table>
-      {selectedItemId !== null && selectedItemId !== undefined && (
-        <p className="placeholder">Details for item {selectedItemId} arrive in Sprint 8.</p>
-      )}
     </>
   );
 }

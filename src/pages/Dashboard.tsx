@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import type { Opportunity } from '../../core/market/ranking/types.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
+import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
 import { fetchAppVersion, fetchTop10, getDesktopApi, isDesktopBridgeAvailable } from '../services/electronApi.ts';
@@ -39,6 +40,15 @@ export default function Dashboard({
   const [liveItemsAnalyzed, setLiveItemsAnalyzed] = useState<number | null>(null);
   const [liveComputedAt, setLiveComputedAt] = useState<number | undefined>(undefined);
   const [top10Error, setTop10Error] = useState<string | null>(null);
+  // Sprint 8 slice-1: row-click selection. Controlled when selectedItemId
+  // is passed, uncontrolled (internal state) otherwise so the live path
+  // works with no props. onSelectItem is always notified.
+  const [internalSelectedItemId, setInternalSelectedItemId] = useState<number | null>(null);
+  const effectiveSelectedItemId = selectedItemId ?? internalSelectedItemId;
+  const handleSelectItem = (itemId: number): void => {
+    setInternalSelectedItemId(itemId);
+    onSelectItem?.(itemId);
+  };
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -57,6 +67,10 @@ export default function Dashboard({
     itemsAnalyzed: effectiveItemsAnalyzed,
     lastUpdated: effectiveLastUpdated,
   });
+
+  const selectedOpportunity = viewModel.top10.find(
+    (opportunity) => opportunity.item.id === effectiveSelectedItemId,
+  ) ?? null;
 
   useEffect(() => {
     if (statusProp !== undefined) {
@@ -119,9 +133,15 @@ export default function Dashboard({
       {(status === 'idle' || status === 'success') && (
         <TopOpportunityTable
           opportunities={viewModel.top10}
-          selectedItemId={selectedItemId}
-          onSelectItem={onSelectItem}
+          selectedItemId={effectiveSelectedItemId}
+          onSelectItem={handleSelectItem}
         />
+      )}
+      {(status === 'idle' || status === 'success') && viewModel.top10.length > 0 && (
+        <>
+          <h2>Item details</h2>
+          <ItemDetailsPanel opportunity={selectedOpportunity} />
+        </>
       )}
 
       <h2>Desktop bridge</h2>
