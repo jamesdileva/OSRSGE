@@ -16,7 +16,13 @@ import type { RankingPresetName, RankingWeights } from './types.js';
  * spread scores relative margin (spreadPct), profitability scores absolute
  * net (log-scale over spreadGp minus 1% tax). Shares unchanged — the total
  * margin weight is the same, now split across independent signals.
+ *
+ * Manual-bump rule (review #27): RANKING_FORMULA_VERSION must be bumped on
+ * any change to scorer.ts component formulas — the version hashes shares
+ * only, so formula edits would otherwise keep the same tag silently.
  */
+export const RANKING_FORMULA_VERSION = '0.2';
+
 export function rankingVersionForPreset(preset: RankingPresetName): string {
   const weights = RANKING_PRESETS[preset];
   if (weights === undefined) {
@@ -24,7 +30,7 @@ export function rankingVersionForPreset(preset: RankingPresetName): string {
   }
   const pct = (share: number): number => Math.round(share * 100);
   return (
-    `0.2-${preset.toLowerCase()}` +
+    `${RANKING_FORMULA_VERSION}-${preset.toLowerCase()}` +
     `-m${pct(weights.momentum)}l${pct(weights.liquidity)}s${pct(weights.spread)}` +
     `p${pct(weights.profitability)}c${pct(weights.consistency)}v${pct(weights.volatility)}`
   );

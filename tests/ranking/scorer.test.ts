@@ -115,7 +115,10 @@ describe('scorer components', () => {
     // Same 10% relative margin, ×100 stakes → different profitability.
     const cheap = profitabilityScore(10, 100);
     const pricey = profitabilityScore(1000, 10_000);
-    expect(spreadScore(10)).toBe(spreadScore(10));
+    const cheapPct = 10;
+    const priceyPct = 10;
+    expect(spreadScore(cheapPct)).toBe(spreadScore(priceyPct));
+    expect(spreadScore(cheapPct)).toBe(100);
     expect(pricey).toBeGreaterThan(cheap);
     // Same absolute net (900gp), different pct → different spread, same profit.
     expect(spreadScore(1)).toBeLessThan(spreadScore(10));
