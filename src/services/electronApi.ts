@@ -1,4 +1,4 @@
-import type { OsrsApi } from '../../shared/ipc.js';
+import type { MarketTop10Request, MarketTop10Response, OsrsApi } from '../../shared/ipc.js';
 
 /**
  * Sole access point to the preload bridge. Components never touch
@@ -22,4 +22,17 @@ export async function fetchAppVersion(): Promise<string> {
     throw new Error('Desktop bridge unavailable');
   }
   return api.app.getVersion();
+}
+
+/**
+ * Sprint 7 slice-2 live path: stub-feed Top-10 via the preload bridge.
+ * Throws when the bridge or the market surface is absent so the Dashboard
+ * can fall back to props (browser dev mode / old preload stay working).
+ */
+export async function fetchTop10(request?: MarketTop10Request): Promise<MarketTop10Response> {
+  const api = getDesktopApi();
+  if (api?.market == null) {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.market.fetchTop10(request);
 }

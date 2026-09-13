@@ -4,7 +4,7 @@ import type { Opportunity } from '../../core/market/ranking/types.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { fetchAppVersion, isDesktopBridgeAvailable } from '../services/electronApi.ts';
+import { fetchAppVersion, fetchTop10, getDesktopApi, isDesktopBridgeAvailable } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -34,11 +34,25 @@ export default function Dashboard({
   );
   const [version, setVersion] = useState<string | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  // Sprint 7 slice-2 live state: stub-feed Top-10 (D#163 — no scheduler).
+  const [liveOpportunities, setLiveOpportunities] = useState<Opportunity[] | null>(null);
+  const [liveItemsAnalyzed, setLiveItemsAnalyzed] = useState<number | null>(null);
+  const [liveComputedAt, setLiveComputedAt] = useState<number | undefined>(undefined);
+  const [top10Error, setTop10Error] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
   const error = errorProp ?? (statusProp !== undefined ? bridgeError : null);
-  const viewModel = buildDashboardViewModel({ opportunities, itemsAnalyzed, lastUpdated });
+  // Props path is preserved for browser-mode + existing tests; the live path
+  // overrides only when the bridge delivers a stub feed with no statusProp.
+  const effectiveOpportunities = liveOpportunities ?? opportunities;
+  const effectiveItemsAnalyzed = liveItemsAnalyzed ?? itemsAnalyzed;
+  const effectiveLastUpdated = liveComputedAt ?? lastUpdated;
+  const viewModel = buildDashboardViewModel({
+    opportunities: effectiveOpportunities,
+    itemsAnalyzed: effectiveItemsAnalyzed,
+    lastUpdated: effectiveLastUpdated,
+  });
 
   useEffect(() => {
     if (statusProp !== undefined) {
@@ -52,12 +66,37 @@ export default function Dashboard({
       .then((v) => {
         if (!cancelled) {
           setVersion(v);
-          setBridgeStatus('success');
+          // Don't clobber a live Top-10 result that already arrived; only
+          // leave loading when no live data and no Top-10 error is pending.
+          setBridgeStatus((prev) => (prev === 'loading' ? 'success' : prev));
         }
       })
       .catch((err: unknown) => {
         if (!cancelled) {
           setBridgeError(err instanceof Error ? err.message : 'Unknown error');
+          setBridgeStatus('error');
+        }
+      });
+    // Live Top-10 path (D#163): bridge available AND no statusProp. Missing
+    // market surface = old preload — skip silently so Sprint 1 version-only
+    // tests and browser-mode fallback keep working.
+    if (getDesktopApi()?.market == null) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    fetchTop10()
+      .then((response) => {
+        if (!cancelled) {
+          setLiveOpportunities(response.opportunities);
+          setLiveItemsAnalyzed(response.itemsAnalyzed);
+          setLiveComputedAt(response.computedAt);
+          setBridgeStatus('success');
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setTop10Error(err instanceof Error ? err.message : 'Unknown error');
           setBridgeStatus('error');
         }
       });
@@ -94,7 +133,7 @@ export default function Dashboard({
         </p>
       )}
       {bridgeAvailable && statusProp === undefined && bridgeStatus === 'error' && (
-        <p className="notice notice-error">IPC failed: {bridgeError}</p>
+        <p className="notice notice-error">IPC failed: {top10Error ?? bridgeError}</p>
       )}
     </section>
   );
