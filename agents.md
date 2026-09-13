@@ -4,6 +4,38 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 7 (slice 1) — Pure dashboard Top-10 + summary (2026-09-13)
+
+**Goal:** first visible ranking surface (roadmap §9): props-driven Top-10
+table + market summary with zero network/IPC/scheduler.
+
+**Did:**
+- `dashboardViewModel.ts`: pure `buildDashboardViewModel` — sorts snapshot
+  by finalScore desc, slices 10, copy-on-rank (fresh objects, never mutates
+  caller props per review #37).
+- `TopOpportunityTable.tsx`: `#/Item/Price/1h/6h/24h/Spread/Liquidity/
+  Risk/Score` columns, risk as text+arrow (not color-only), empty state
+  offline-pure; `selectedItemId` placeholder notes Sprint 8 details.
+- `MarketSummary.tsx`: items analyzed / opportunities found / last update.
+- `Dashboard.tsx`: props-driven (`statusProp ?? bridgeStatus`), IPC
+  bridgeStatus wired into status so bridge failures surface as error
+  (review #37); S8 placeholder for details.
+- Tests: `dashboard-top10.test.tsx` — 5 tests (sort/slice/rank, purity
+  across calls, sorted render + risk text, empty states).
+
+**Decisions:**
+- Slice-1 stays pure by design: no IPC/scheduler (S10), no filters/presets
+  (S9), no charts/details (S8) — live wiring is slice-2 with agent-b.
+- Copy-on-rank enforced: `[...]/slice` alone still shares refs, so map to
+  `{...o, rank}` keeps the builder side-effect free.
+
+**Verified:**
+- `npm test` → 23 files, 96/96 pass (zero network).
+- `npm run typecheck` + `npm run build` green (workspace clean).
+
+**Commits:** `d36ac84` slice-1 view-model + table, `a4b5b0c` review #37
+fixes (both on `origin/main`).
+
 ## Sprint 6 (slice 3) — Spread/profit orthogonalization (0.2) + live 0.2 ablation re-run (2026-09-13)
 
 **Goal:** resolve the spread double-count risk before Sprint 7: make spread
