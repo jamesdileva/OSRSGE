@@ -1,5 +1,9 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import {
+  ALERTS_ADD,
+  ALERTS_GET,
+  ALERTS_REMOVE,
+  ALERTS_SET_ENABLED,
   APP_GET_VERSION,
   MARKET_GET_HISTORY,
   MARKET_GET_TOP10,
@@ -10,6 +14,10 @@ import {
   WATCHLIST_REMOVE,
 } from '../shared/ipc.js';
 import type {
+  AlertsAddRequest,
+  AlertsGetResponse,
+  AlertsRemoveRequest,
+  AlertsSetEnabledRequest,
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
@@ -53,6 +61,17 @@ const api: OsrsApi = {
       ipcRenderer.invoke(WATCHLIST_ADD, request) as Promise<WatchlistGetResponse>,
     removeFromWatchlist: (request: WatchlistRemoveRequest) =>
       ipcRenderer.invoke(WATCHLIST_REMOVE, request) as Promise<WatchlistGetResponse>,
+  },
+  // Sprint 12 slice-2 part 2: alert-rule persistence (rule store only;
+  // evaluation stays renderer-side via evaluateAlerts, in-app only).
+  alerts: {
+    getAlerts: () => ipcRenderer.invoke(ALERTS_GET) as Promise<AlertsGetResponse>,
+    addAlertRule: (request: AlertsAddRequest) =>
+      ipcRenderer.invoke(ALERTS_ADD, request) as Promise<AlertsGetResponse>,
+    removeAlertRule: (request: AlertsRemoveRequest) =>
+      ipcRenderer.invoke(ALERTS_REMOVE, request) as Promise<AlertsGetResponse>,
+    setAlertRuleEnabled: (request: AlertsSetEnabledRequest) =>
+      ipcRenderer.invoke(ALERTS_SET_ENABLED, request) as Promise<AlertsGetResponse>,
   },
 };
 

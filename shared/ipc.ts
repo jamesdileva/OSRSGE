@@ -7,6 +7,7 @@ import type { Opportunity } from '../core/market/ranking/types.js';
 import type { OpportunityFiltersWire } from '../core/market/ranking/filters.js';
 import type { MarketSnapshot } from '../core/market/normalization/normalizer.js';
 import type { WatchlistEntry } from '../core/watchlist/watchlist.js';
+import type { AlertRule, AlertRuleDraft } from '../core/alerts/alertRules.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
 export const APP_GET_VERSION = 'app:getVersion';
@@ -35,6 +36,19 @@ export const MARKET_REFRESH_UPDATED = 'market:refreshUpdated';
 export const WATCHLIST_GET = 'watchlist:get';
 export const WATCHLIST_ADD = 'watchlist:add';
 export const WATCHLIST_REMOVE = 'watchlist:remove';
+
+/**
+ * Sprint 12 slice-2 part 2: alert-rule persistence channels (roadmap §14).
+ * Main owns the JSON repository (part 1); the renderer never touches
+ * files directly. Responses return the full updated rule list
+ * ({ rules }) so the renderer stays in sync with a single round-trip
+ * (no separate re-fetch after add/remove/toggle — S11 watchlist precedent).
+ * Evaluation stays renderer-side via evaluateAlerts; no OS notification.
+ */
+export const ALERTS_GET = 'alerts:get';
+export const ALERTS_ADD = 'alerts:add';
+export const ALERTS_REMOVE = 'alerts:remove';
+export const ALERTS_SET_ENABLED = 'alerts:setEnabled';
 
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
@@ -145,6 +159,35 @@ export interface OsrsApiWatchlist {
   removeFromWatchlist(request: WatchlistRemoveRequest): Promise<WatchlistGetResponse>;
 }
 
+/**
+ * Sprint 12 slice-2 part 2 alert-rule IPC contract. Add carries a draft
+ * (createdAt stamped main-side from the injected clock); remove/toggle
+ * carry the rule id. All responses return the full updated rule list.
+ */
+export interface AlertsGetResponse {
+  rules: AlertRule[];
+}
+
+export interface AlertsAddRequest {
+  draft: AlertRuleDraft;
+}
+
+export interface AlertsRemoveRequest {
+  id: string;
+}
+
+export interface AlertsSetEnabledRequest {
+  id: string;
+  enabled: boolean;
+}
+
+export interface OsrsApiAlerts {
+  getAlerts(): Promise<AlertsGetResponse>;
+  addAlertRule(request: AlertsAddRequest): Promise<AlertsGetResponse>;
+  removeAlertRule(request: AlertsRemoveRequest): Promise<AlertsGetResponse>;
+  setAlertRuleEnabled(request: AlertsSetEnabledRequest): Promise<AlertsGetResponse>;
+}
+
 export interface OsrsApi {
   app: OsrsApiApp;
   /**
@@ -160,4 +203,10 @@ export interface OsrsApi {
    * `typeof !== 'function'` guard (S7/S8/S10 precedent).
    */
   watchlist?: OsrsApiWatchlist;
+  /**
+   * Sprint 12 slice-2 part 2 alert-rule surface. Optional so a stale
+   * preload predating slice-2 still typechecks; the renderer keeps a
+   * runtime `typeof !== 'function'` guard (S7/S8/S10/S11 precedent).
+   */
+  alerts?: OsrsApiAlerts;
 }

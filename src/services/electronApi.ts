@@ -1,4 +1,8 @@
 import type {
+  AlertsAddRequest,
+  AlertsGetResponse,
+  AlertsRemoveRequest,
+  AlertsSetEnabledRequest,
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
@@ -115,4 +119,43 @@ export async function removeWatchedItem(request: WatchlistRemoveRequest): Promis
     throw new Error('Desktop bridge unavailable');
   }
   return api.watchlist.removeFromWatchlist(request);
+}
+
+/**
+ * Sprint 12 slice-2 part 2 alert-rule persistence via the preload bridge.
+ * Throws when the bridge is absent or the preload predates the alerts
+ * surface so callers can fall back (S7/S8/S10/S11 stale-preload precedent).
+ */
+export async function fetchAlertRules(): Promise<AlertsGetResponse> {
+  const api = getDesktopApi();
+  if (api?.alerts == null || typeof api.alerts.getAlerts !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.alerts.getAlerts();
+}
+
+export async function addAlertRuleRequest(request: AlertsAddRequest): Promise<AlertsGetResponse> {
+  const api = getDesktopApi();
+  if (api?.alerts == null || typeof api.alerts.addAlertRule !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.alerts.addAlertRule(request);
+}
+
+export async function removeAlertRuleRequest(request: AlertsRemoveRequest): Promise<AlertsGetResponse> {
+  const api = getDesktopApi();
+  if (api?.alerts == null || typeof api.alerts.removeAlertRule !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.alerts.removeAlertRule(request);
+}
+
+export async function setAlertRuleEnabledRequest(
+  request: AlertsSetEnabledRequest,
+): Promise<AlertsGetResponse> {
+  const api = getDesktopApi();
+  if (api?.alerts == null || typeof api.alerts.setAlertRuleEnabled !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.alerts.setAlertRuleEnabled(request);
 }

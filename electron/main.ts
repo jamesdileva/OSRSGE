@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { MARKET_REFRESH_NOW, MARKET_REFRESH_UPDATED } from '../shared/ipc.js';
 import type { MarketRefreshUpdate } from '../shared/ipc.js';
 import { registerAppHandlers } from './ipc/app.handlers.js';
+import { registerAlertsHandlers } from './ipc/alerts.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
@@ -11,6 +12,7 @@ import { getApplicationVersion, initializeApplicationServices } from './services
 import { startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
 import { JsonWatchlistRepository } from '../storage/json/JsonWatchlistRepository.js';
+import { JsonAlertRepository } from '../storage/json/JsonAlertRepository.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
@@ -45,6 +47,13 @@ void app.whenReady().then(() => {
   registerWatchlistHandlers(ipcMain, {
     load: () => watchlistRepo.load(),
     save: (entries) => watchlistRepo.save(entries),
+  });
+  // Sprint 12 slice-2 part 2: alert-rule persistence owned by main
+  // (rule store only; evaluation stays renderer-side, in-app only).
+  const alertsRepo = new JsonAlertRepository(app.getPath('userData'));
+  registerAlertsHandlers(ipcMain, {
+    load: () => alertsRepo.load(),
+    save: (rules) => alertsRepo.save(rules),
   });
   createWindow();
   // Sprint 10 slice-2: timer runtime on stub-only refresh (D#163 — the
