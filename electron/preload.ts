@@ -5,6 +5,9 @@ import {
   MARKET_GET_TOP10,
   MARKET_REFRESH_NOW,
   MARKET_REFRESH_UPDATED,
+  WATCHLIST_ADD,
+  WATCHLIST_GET,
+  WATCHLIST_REMOVE,
 } from '../shared/ipc.js';
 import type {
   MarketHistoryRequest,
@@ -13,6 +16,9 @@ import type {
   MarketTop10Request,
   MarketTop10Response,
   OsrsApi,
+  WatchlistAddRequest,
+  WatchlistGetResponse,
+  WatchlistRemoveRequest,
 } from '../shared/ipc.js';
 
 /**
@@ -38,6 +44,15 @@ const api: OsrsApi = {
         ipcRenderer.removeListener(MARKET_REFRESH_UPDATED, wrapped);
       };
     },
+  },
+  // Sprint 11 slice-2: watchlist persistence (ID-only entries; view-time
+  // derivation stays renderer-side via buildWatchlistView).
+  watchlist: {
+    getWatchlist: () => ipcRenderer.invoke(WATCHLIST_GET) as Promise<WatchlistGetResponse>,
+    addToWatchlist: (request: WatchlistAddRequest) =>
+      ipcRenderer.invoke(WATCHLIST_ADD, request) as Promise<WatchlistGetResponse>,
+    removeFromWatchlist: (request: WatchlistRemoveRequest) =>
+      ipcRenderer.invoke(WATCHLIST_REMOVE, request) as Promise<WatchlistGetResponse>,
   },
 };
 

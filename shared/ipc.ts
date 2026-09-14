@@ -6,6 +6,7 @@
 import type { Opportunity } from '../core/market/ranking/types.js';
 import type { OpportunityFiltersWire } from '../core/market/ranking/filters.js';
 import type { MarketSnapshot } from '../core/market/normalization/normalizer.js';
+import type { WatchlistEntry } from '../core/watchlist/watchlist.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
 export const APP_GET_VERSION = 'app:getVersion';
@@ -24,6 +25,16 @@ export const MARKET_GET_HISTORY = 'market:getHistory';
  */
 export const MARKET_REFRESH_NOW = 'market:refreshNow';
 export const MARKET_REFRESH_UPDATED = 'market:refreshUpdated';
+
+/**
+ * Sprint 11 slice-2: watchlist persistence channels (roadmap §13).
+ * Main owns the JSON repository (S11 slice-1); the renderer never touches
+ * files directly. Payloads carry ID-only entries — price/change/spread/
+ * risk resolve at view time via buildWatchlistView (never persisted).
+ */
+export const WATCHLIST_GET = 'watchlist:get';
+export const WATCHLIST_ADD = 'watchlist:add';
+export const WATCHLIST_REMOVE = 'watchlist:remove';
 
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
@@ -111,6 +122,29 @@ export interface MarketRefreshUpdate {
   lastSuccessAt?: number;
 }
 
+/**
+ * Sprint 11 slice-2 watchlist IPC contract. Responses return the full
+ * updated entry list ({ entries }) so the renderer stays in sync with a
+ * single round-trip (no separate re-fetch after add/remove).
+ */
+export interface WatchlistGetResponse {
+  entries: WatchlistEntry[];
+}
+
+export interface WatchlistAddRequest {
+  itemId: number;
+}
+
+export interface WatchlistRemoveRequest {
+  itemId: number;
+}
+
+export interface OsrsApiWatchlist {
+  getWatchlist(): Promise<WatchlistGetResponse>;
+  addToWatchlist(request: WatchlistAddRequest): Promise<WatchlistGetResponse>;
+  removeFromWatchlist(request: WatchlistRemoveRequest): Promise<WatchlistGetResponse>;
+}
+
 export interface OsrsApi {
   app: OsrsApiApp;
   /**
@@ -120,4 +154,10 @@ export interface OsrsApi {
    * market surface still falls back to the props path.
    */
   market: OsrsApiMarket;
+  /**
+   * Sprint 11 slice-2 watchlist surface. Optional so a stale preload
+   * predating slice-2 still typechecks; the renderer keeps a runtime
+   * `typeof !== 'function'` guard (S7/S8/S10 precedent).
+   */
+  watchlist?: OsrsApiWatchlist;
 }

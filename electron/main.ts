@@ -5,10 +5,12 @@ import { MARKET_REFRESH_NOW, MARKET_REFRESH_UPDATED } from '../shared/ipc.js';
 import type { MarketRefreshUpdate } from '../shared/ipc.js';
 import { registerAppHandlers } from './ipc/app.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
+import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
 import { startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
+import { JsonWatchlistRepository } from '../storage/json/JsonWatchlistRepository.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
@@ -37,6 +39,13 @@ void app.whenReady().then(() => {
   initializeApplicationServices();
   registerAppHandlers(ipcMain, { getVersion: getApplicationVersion });
   registerMarketHandlers(ipcMain, { getTop10: (request) => getStubTop10Response(request), getHistory: (request) => getStubHistoryResponse(request) });
+  // Sprint 11 slice-2: watchlist persistence owned by main (ID-only store,
+  // JSON backend from slice-1; SQLite can replace it untouched per §17).
+  const watchlistRepo = new JsonWatchlistRepository(app.getPath('userData'));
+  registerWatchlistHandlers(ipcMain, {
+    load: () => watchlistRepo.load(),
+    save: (entries) => watchlistRepo.save(entries),
+  });
   createWindow();
   // Sprint 10 slice-2: timer runtime on stub-only refresh (D#163 — the
   // refresh advances schedule state; no live pipeline yet). Notify pushes

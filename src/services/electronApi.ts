@@ -5,6 +5,9 @@ import type {
   MarketTop10Request,
   MarketTop10Response,
   OsrsApi,
+  WatchlistAddRequest,
+  WatchlistGetResponse,
+  WatchlistRemoveRequest,
 } from '../../shared/ipc.js';
 
 /**
@@ -83,4 +86,33 @@ export function subscribeToRefreshUpdates(listener: (update: MarketRefreshUpdate
     throw new Error('Desktop bridge unavailable');
   }
   return api.market.onRefreshUpdated(listener);
+}
+
+/**
+ * Sprint 11 slice-2 watchlist persistence via the preload bridge.
+ * Throws when the bridge is absent or the preload predates the watchlist
+ * surface so callers can fall back (S7/S8/S10 stale-preload precedent).
+ */
+export async function fetchWatchlist(): Promise<WatchlistGetResponse> {
+  const api = getDesktopApi();
+  if (api?.watchlist == null || typeof api.watchlist.getWatchlist !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.watchlist.getWatchlist();
+}
+
+export async function addWatchedItem(request: WatchlistAddRequest): Promise<WatchlistGetResponse> {
+  const api = getDesktopApi();
+  if (api?.watchlist == null || typeof api.watchlist.addToWatchlist !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.watchlist.addToWatchlist(request);
+}
+
+export async function removeWatchedItem(request: WatchlistRemoveRequest): Promise<WatchlistGetResponse> {
+  const api = getDesktopApi();
+  if (api?.watchlist == null || typeof api.watchlist.removeFromWatchlist !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.watchlist.removeFromWatchlist(request);
 }
