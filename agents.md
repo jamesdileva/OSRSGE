@@ -4,6 +4,42 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 14 (slice 1) — Pure backtesting core (2026-09-14)
+
+**Goal:** first backtesting surface (roadmap §16, arch §31, guide §§49–50):
+pure offline settle + summarize core with zero snapshots/IPC/persistence/UI.
+
+**Did:**
+- `core/market/backtest/backtester.ts` (new, pure): `settlePicks` (exit =
+  earliest series point at/after entry + horizon within tolerance; missing
+  series / no in-tolerance future point → `unsettled` count, never an
+  error), `summarizeTrades` (roadmap §16: avg/median return, win rate, max
+  drawdown over the additive equity curve floored at 0, false-positive rate
+  + hit rate as complements), `runRankedBacktest` (guide §50 loop with
+  ranking injected as `rankAt(timeMs)`; picks entered away from their
+  evaluation time throw fail-closed). Simple percent returns, losses stay
+  negative; strict-throw on invalid; frozen-input safe; no Date.now.
+- Tests: `tests/backtest/backtester.test.ts` — 12 tests (settle math, loss
+  negativity, unsettled-not-error, tolerance gating + earliest-point,
+  unsorted determinism, invalid-throw matrix, frozen purity, summary math +
+  complements, drawdown, empty-zeros, driver loop + verbatim-T + ordering
+  guard) — 263 total (251 → 263).
+
+**Decisions:**
+- Slice-1 stays pure by design: no snapshots, no scorer coupling (ranking
+  injected as a callback — slice-2 plugs the real scorer over time-sliced
+  snapshots), no IPC/persistence/UI (later slices).
+- No-future-leak by construction: core passes only T to `rankAt` and reads
+  only T + horizon points for settlement; building the past-only view stays
+  the caller's contract.
+- Additive (non-compounding) equity for drawdown, documented so a
+  compounding variant stays an explicit separate choice.
+- Ties count as losses (fail-closed); empty trade lists summarize to zeros.
+
+**Verified:**
+- `npm test` → 45 files, 263/263 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+
 ## Sprint 13 (slice 2) — Flip-calculator IPC + panel (2026-09-14)
 
 **Goal:** second flip-calculator surface (roadmap §15): stateless
