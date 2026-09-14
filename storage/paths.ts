@@ -29,3 +29,7 @@ export function historyDir(baseDir: string): string {
 export function watchlistFile(baseDir: string): string {
   return path.join(baseDir, 'watchlist.json');
 }
+
+export function alertsFile(baseDir: string): string {
+  return path.join(baseDir, 'alerts.json');
+}
