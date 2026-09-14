@@ -169,7 +169,15 @@ export function settlePicks(
   return { trades, unsettled };
 }
 
-/** Summarize settled trades with the roadmap §16 metrics. */
+/**
+ * Summarize settled trades with the roadmap §16 metrics.
+ *
+ * Slice-2 correctness (review #137): wins derive from `returnPct > 0`
+ * (the caller-supplied `win` flag is ignored — hand-built inconsistent
+ * flags must not corrupt the rates, and ties stay losers), and the
+ * equity loop runs over an internal (exitTime, entryTime, itemId)-sorted
+ * copy so permuted inputs still give the documented maxDrawdown.
+ */
 export function summarizeTrades(trades: readonly BacktestTrade[]): BacktestSummary {
   const empty: BacktestSummary = {
     tradeCount: 0,
@@ -183,13 +191,16 @@ export function summarizeTrades(trades: readonly BacktestTrade[]): BacktestSumma
   if (trades.length === 0) {
     return empty;
   }
-  const returns = trades.map((trade) => {
+  const ordered = [...trades].sort(
+    (a, b) => a.exitTime - b.exitTime || a.entryTime - b.entryTime || a.itemId - b.itemId,
+  );
+  const returns = ordered.map((trade) => {
     if (!Number.isFinite(trade.returnPct)) {
       throw new Error('Backtest trade returnPct must be finite');
     }
     return trade.returnPct;
   });
-  const wins = trades.filter((trade) => trade.win).length;
+  const wins = returns.filter((returnPct) => returnPct > 0).length;
   const avgReturn = returns.reduce((sum, value) => sum + value, 0) / returns.length;
   const sorted = [...returns].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
@@ -197,7 +208,7 @@ export function summarizeTrades(trades: readonly BacktestTrade[]): BacktestSumma
     sorted.length % 2 === 1
       ? (sorted[middle] as number)
       : ((sorted[middle - 1] as number) + (sorted[middle] as number)) / 2;
-  const winRate = wins / trades.length;
+  const winRate = wins / ordered.length;
   let peak = 0;
   let equity = 0;
   let maxDrawdown = 0;
