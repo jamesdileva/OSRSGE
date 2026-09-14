@@ -58,17 +58,16 @@ export default function FlipCalculatorPanel({
       return;
     }
     setFormError(null);
+    const buyLimitParsed = parseOptionalNumber(buyLimit);
+    const capitalParsed = parseOptionalNumber(availableCapital);
+    const flipsPerHourParsed = parseOptionalNumber(flipsPerHour);
     onCalculate({
       buyPrice: buy,
       sellPrice: sell,
       quantity: qty,
-      ...(parseOptionalNumber(buyLimit) !== undefined ? { buyLimit: parseOptionalNumber(buyLimit) as number } : {}),
-      ...(parseOptionalNumber(availableCapital) !== undefined
-        ? { availableCapital: parseOptionalNumber(availableCapital) as number }
-        : {}),
-      ...(parseOptionalNumber(flipsPerHour) !== undefined
-        ? { flipsPerHour: parseOptionalNumber(flipsPerHour) as number }
-        : {}),
+      ...(buyLimitParsed !== undefined ? { buyLimit: buyLimitParsed } : {}),
+      ...(capitalParsed !== undefined ? { availableCapital: capitalParsed } : {}),
+      ...(flipsPerHourParsed !== undefined ? { flipsPerHour: flipsPerHourParsed } : {}),
     });
   };
 
@@ -124,29 +123,33 @@ export default function FlipCalculatorPanel({
       {formError !== null && <p className="notice notice-error">{formError}</p>}
       {error !== null && <p className="notice notice-error">Flip unavailable: {error}</p>}
       {result !== null && (
-        <dl aria-label="Flip result">
-          <dt>Effective quantity</dt>
-          <dd>
-            {result.effectiveQuantity} of {result.requestedQuantity}
-            {result.cappedByLimit ? ' (capped by buy limit)' : ''}
-            {result.cappedByCapital ? ' (capped by capital)' : ''}
-          </dd>
-          <dt>Unit net</dt>
-          <dd>{result.unitNet.toFixed(2)} gp</dd>
-          <dt>Total net</dt>
-          <dd>{result.netProfit.toFixed(2)} gp</dd>
-          <dt>Capital required</dt>
-          <dd>{result.capitalRequired.toFixed(2)} gp</dd>
-          <dt>ROI</dt>
-          <dd>{(result.roi * 100).toFixed(2)}%</dd>
-          {result.effectiveQuantity === 0 && <p className="placeholder">Nothing affordable — zero-quantity result, not an error.</p>}
-          {result.profitPerHour !== undefined && (
-            <>
-              <dt>Profit per hour</dt>
-              <dd>{result.profitPerHour.toFixed(2)} gp</dd>
-            </>
+        <>
+          <dl aria-label="Flip result">
+            <dt>Effective quantity</dt>
+            <dd>
+              {result.effectiveQuantity} of {result.requestedQuantity}
+              {result.cappedByLimit ? ' (capped by buy limit)' : ''}
+              {result.cappedByCapital ? ' (capped by capital)' : ''}
+            </dd>
+            <dt>Unit net</dt>
+            <dd>{result.unitNet.toFixed(2)} gp</dd>
+            <dt>Total net</dt>
+            <dd>{result.netProfit.toFixed(2)} gp</dd>
+            <dt>Capital required</dt>
+            <dd>{result.capitalRequired.toFixed(2)} gp</dd>
+            <dt>ROI</dt>
+            <dd>{(result.roi * 100).toFixed(2)}%</dd>
+            {result.profitPerHour !== undefined && (
+              <>
+                <dt>Profit per hour</dt>
+                <dd>{result.profitPerHour.toFixed(2)} gp</dd>
+              </>
+            )}
+          </dl>
+          {result.effectiveQuantity === 0 && (
+            <p className="placeholder">Nothing affordable — zero-quantity result, not an error.</p>
           )}
-        </dl>
+        </>
       )}
     </div>
   );

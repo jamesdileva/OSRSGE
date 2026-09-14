@@ -286,7 +286,8 @@ export default function Dashboard({
   };
 
   const handleCalculateFlip = (input: FlipInput): void => {
-    if (getDesktopApi()?.flips == null) {
+    const api = getDesktopApi();
+    if (api?.flips == null || typeof api.flips.calculateFlip !== 'function') {
       try {
         setFlipResult(calcFlip(input));
         setFlipError(null);
