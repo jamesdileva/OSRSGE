@@ -24,6 +24,8 @@ export interface WatchlistViewRow {
  * Build the watchlist view: one row per entry, in store order, with the
  * matching opportunity attached (or null for unknown/stale ids).
  * Never mutates inputs; returns fresh row/entry objects (frozen-input safe).
+ * Duplicate entry ids dedupe first-wins (a direct caller bypassing the
+ * store/repo, which already enforce first-wins, still gets one row).
  */
 export function buildWatchlistView(
   entries: readonly WatchlistEntry[],
@@ -36,9 +38,18 @@ export function buildWatchlistView(
       byId.set(id, opportunity);
     }
   }
-  return entries.map((entry) => ({
-    itemId: entry.itemId,
-    addedAt: entry.addedAt,
-    opportunity: byId.get(entry.itemId) ?? null,
-  }));
+  const seen = new Set<number>();
+  const rows: WatchlistViewRow[] = [];
+  for (const entry of entries) {
+    if (seen.has(entry.itemId)) {
+      continue;
+    }
+    seen.add(entry.itemId);
+    rows.push({
+      itemId: entry.itemId,
+      addedAt: entry.addedAt,
+      opportunity: byId.get(entry.itemId) ?? null,
+    });
+  }
+  return rows;
 }

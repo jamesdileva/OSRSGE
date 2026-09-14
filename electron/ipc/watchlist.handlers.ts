@@ -28,7 +28,9 @@ export function registerWatchlistHandlers(ipcMain: IpcMainHandler, deps: Watchli
 
   ipcMain.handle(WATCHLIST_GET, async (): Promise<WatchlistGetResponse> => {
     const entries = await deps.load();
-    return { entries };
+    // Copy for symmetry with add/remove: safe across real IPC (structured
+    // clone) and avoids aliasing for in-process callers.
+    return { entries: entries.map((entry) => ({ ...entry })) };
   });
 
   ipcMain.handle(WATCHLIST_ADD, async (_event: unknown, request?: unknown): Promise<WatchlistGetResponse> => {

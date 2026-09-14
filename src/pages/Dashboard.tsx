@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import type { Opportunity } from '../../core/market/ranking/types.js';
+import type { WatchlistEntry } from '../../core/watchlist/watchlist.js';
+import { addToWatchlist as addToWatchlistPure, removeFromWatchlist as removeFromWatchlistPure } from '../../core/watchlist/watchlist.js';
+import { buildWatchlistView } from '../../core/watchlist/watchlistView.js';
 import { DEFAULT_FILTERS, applyFilters, encodeFiltersForIpc } from '../../core/market/ranking/filters.js';
 import type { OpportunityFilters } from '../../core/market/ranking/filters.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
@@ -9,8 +12,9 @@ import FilterBar from '../components/dashboard/FilterBar.tsx';
 import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
 import PriceChart from '../components/dashboard/PriceChart.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
+import WatchlistPanel from '../components/dashboard/WatchlistPanel.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { fetchAppVersion, fetchItemHistory, fetchTop10, getDesktopApi, isDesktopBridgeAvailable } from '../services/electronApi.ts';
+import { addWatchedItem, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeWatchedItem } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -24,6 +28,17 @@ export interface DashboardProps {
   error?: string | null;
   selectedItemId?: number | null;
   onSelectItem?: (itemId: number) => void;
+  /**
+   * Sprint 11 slice-2 part 2b: optional props-path watchlist. When defined,
+   * the Dashboard renders it directly (offline-pure, zero IPC) and reports
+   * add/remove via onAddWatch/onRemoveWatch. When undefined, the Dashboard
+   * fetches via fetchWatchlist (bridge) and persists via
+   * addWatchedItem/removeWatchedItem, falling back to an in-memory list in
+   * bridge-absent browser mode.
+   */
+  watchlist?: WatchlistEntry[];
+  onAddWatch?: (itemId: number) => void;
+  onRemoveWatch?: (itemId: number) => void;
 }
 
 export default function Dashboard({
@@ -34,6 +49,9 @@ export default function Dashboard({
   error: errorProp = null,
   selectedItemId = null,
   onSelectItem,
+  watchlist: watchlistProp,
+  onAddWatch,
+  onRemoveWatch,
 }: DashboardProps): JSX.Element {
   const [bridgeStatus, setBridgeStatus] = useState<DashboardStatus>(() =>
     statusProp ?? (isDesktopBridgeAvailable() ? 'loading' : 'idle'),
@@ -67,6 +85,13 @@ export default function Dashboard({
   const [historyPoints, setHistoryPoints] = useState<MarketSnapshot[] | null>(null);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  // Sprint 11 slice-2 part 2b: watchlist entries. Props path (watchlistProp
+  // defined) renders directly with zero IPC; live path fetches via the
+  // bridge once and persists add/remove round-trips; bridge-absent mode
+  // keeps an in-memory list via the pure store helpers (IDs only).
+  const [liveWatchlist, setLiveWatchlist] = useState<WatchlistEntry[] | null>(null);
+  const [watchlistError, setWatchlistError] = useState<string | null>(null);
+  const effectiveWatchlist = watchlistProp ?? liveWatchlist ?? [];
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -97,6 +122,50 @@ export default function Dashboard({
   const selectedOpportunity = viewModel.top10.find(
     (opportunity) => opportunity.item.id === effectiveSelectedItemId,
   ) ?? null;
+  // Watchlist view: store order (first-watch-wins), unknown/stale ids as
+  // null rows. Derived from the UNFILTERED effective list so a watched item
+  // hidden by a filter still shows in the watchlist.
+  const watchlistRows = buildWatchlistView(effectiveWatchlist, effectiveOpportunities);
+  const isSelectedWatched =
+    effectiveSelectedItemId !== null && effectiveWatchlist.some((entry) => entry.itemId === effectiveSelectedItemId);
+
+  const handleAddWatch = (itemId: number): void => {
+    if (watchlistProp !== undefined) {
+      onAddWatch?.(itemId);
+      return;
+    }
+    if (getDesktopApi()?.watchlist == null) {
+      setLiveWatchlist((prev) => addToWatchlistPure(prev ?? [], itemId, Date.now()));
+      return;
+    }
+    addWatchedItem({ itemId })
+      .then((response) => {
+        setLiveWatchlist(response.entries);
+        setWatchlistError(null);
+      })
+      .catch((err: unknown) => {
+        setWatchlistError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleRemoveWatch = (itemId: number): void => {
+    if (watchlistProp !== undefined) {
+      onRemoveWatch?.(itemId);
+      return;
+    }
+    if (getDesktopApi()?.watchlist == null) {
+      setLiveWatchlist((prev) => removeFromWatchlistPure(prev ?? [], itemId));
+      return;
+    }
+    removeWatchedItem({ itemId })
+      .then((response) => {
+        setLiveWatchlist(response.entries);
+        setWatchlistError(null);
+      })
+      .catch((err: unknown) => {
+        setWatchlistError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
 
   useEffect(() => {
     if (statusProp !== undefined) {
@@ -193,6 +262,34 @@ export default function Dashboard({
     };
   }, [effectiveSelectedItemId]);
 
+  // Sprint 11 slice-2 part 2b watchlist fetch: props path (watchlistProp
+  // defined) never fetches; stale preloads (watchlist == null) and
+  // bridge-absent mode skip silently with the in-memory list.
+  useEffect(() => {
+    if (watchlistProp !== undefined) {
+      return;
+    }
+    if (getDesktopApi()?.watchlist == null) {
+      return;
+    }
+    let cancelled = false;
+    fetchWatchlist()
+      .then((response) => {
+        if (!cancelled) {
+          setLiveWatchlist(response.entries);
+          setWatchlistError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setWatchlistError(err instanceof Error ? err.message : 'Unknown error');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [watchlistProp]);
+
   return (
     <section aria-label="Market dashboard">
       <MarketSummary summary={viewModel.summary} />
@@ -214,6 +311,19 @@ export default function Dashboard({
         <>
           <h2>Item details</h2>
           <ItemDetailsPanel opportunity={selectedOpportunity} />
+          {selectedOpportunity !== null && effectiveSelectedItemId !== null && (
+            <button
+              type="button"
+              aria-label={isSelectedWatched ? `Unwatch ${effectiveSelectedItemId}` : `Watch ${effectiveSelectedItemId}`}
+              onClick={() =>
+                isSelectedWatched
+                  ? handleRemoveWatch(effectiveSelectedItemId)
+                  : handleAddWatch(effectiveSelectedItemId)
+              }
+            >
+              {isSelectedWatched ? 'Unwatch' : 'Watch'}
+            </button>
+          )}
           {selectedOpportunity !== null && (
             <>
               <h3>Price history (24h)</h3>
@@ -229,6 +339,20 @@ export default function Dashboard({
               )}
             </>
           )}
+        </>
+      )}
+      {(status === 'idle' || status === 'success') && (
+        <>
+          <h2>Watchlist</h2>
+          {watchlistError !== null && (
+            <p className="notice notice-error">Watchlist unavailable: {watchlistError}</p>
+          )}
+          <WatchlistPanel
+            rows={watchlistRows}
+            selectedItemId={effectiveSelectedItemId}
+            onSelectItem={handleSelectItem}
+            onRemoveItem={handleRemoveWatch}
+          />
         </>
       )}
 
