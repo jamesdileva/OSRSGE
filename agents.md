@@ -4,6 +4,61 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 15 (slice 1) — Pure weight-variant comparison over S14 harness (2026-09-14)
+
+**Goal:** first weight-tuning surface (roadmap §17, guide §51): pure
+multi-period comparison of caller-supplied weight sets through the S14
+scorer harness, past-only by inheritance, with comparability gates so
+variants compete on identical evidence. Still zero IPC/persistence/UI/
+scheduler/search; automated weight search stays out.
+
+**Did:**
+- `core/market/backtest/compareVariants.ts` (new, pure):
+  `compareWeightVariants` runs every variant through the same stored
+  histories over the same periods — per variant: `createScorerRankAt`
+  (S14 past-only slice per T, weights-only delta per config) →
+  per-period `runRankedBacktest` (S14 settle + summarize) → per-period
+  outcomes plus cross-period aggregate (`meanAvgReturn`/`meanWinRate`
+  unweighted means, one period = one vote; `totalTrades`/`totalUnsettled`
+  sums; `rankedLabels` by mean return desc, label-asc tiebreak) —
+  `weightVariantTag` content-aware `0.2-custom` tags from actual shares
+  (mirroring the `rankingVersionForPreset` scheme), `MIN_COMPARISON_
+  PERIODS = 3` floor. Strict-throw on <2 variants, bad/duplicate
+  labels, `isValidWeights` per variant, weights-only delta
+  (preset/minPrice/minVolume/minHistoryMinutes identical or throw),
+  duplicate-weight tags, <3/duplicate/empty/NaN periods; frozen-input
+  safe; fresh output objects per call.
+- Tests: `tests/backtest/compareVariants.test.ts` — 6 tests (tag
+  content-awareness, variant-gate matrix, weights-only + duplicate +
+  period-gate matrix incl. downstream topN, momentum-vs-spread
+  divergence disconfirm — climber vs flat-wide-spread fixtures →
+  `rankedLabels [momentum, spread]`, momentum 3/3 wins meanWinRate 1 /
+  meanAvgReturn >3 vs spread 0/0, frozen purity + double-run equality
+  + fresh outputs) — 279 total (273 → 279).
+
+**Decisions:**
+- Weights-only delta enforced: a variant that also moves a filter would
+  measure the filter, not the weights — preset/minPrice/minVolume/
+  minHistoryMinutes must match across variants.
+- No-future-leak inherited, not re-proven: ranking via S14
+  `createScorerRankAt`, settlement via S14 slice-1 (reads only T +
+  horizon); full-history-in stays safe for the same S14 reason.
+- Aggregation without overclaim: unweighted means (each period one
+  historical regime, one vote); overlapping periods double-count trades
+  in the totals (documented — keep periods disjoint when totals must
+  read as distinct trades); `rankedLabels` by mean return is the
+  default ordering, not a claim return beats win rate/drawdown — full
+  per-period summaries ship alongside for re-ranking.
+- Carried non-gating nits (reviews #150/#151): `weightVariantTag`
+  pct-rounding can false-collide sets differing by <0.005 (fail-closed,
+  over-strict); topN/horizonMs/toleranceMs validation delegated
+  downstream (fail-closed); zero-trade periods contribute avgReturn 0
+  to the unweighted mean (documented one-vote semantics).
+
+**Verified:**
+- `npm test` → 47 files, 279/279 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+
 ## Sprint 14 (slice 2) — Scorer-over-snapshots backtest harness, past-only (2026-09-14)
 
 **Goal:** second backtesting surface (roadmap §16, guide §50): wire the
