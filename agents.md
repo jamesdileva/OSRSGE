@@ -44,7 +44,7 @@ buy-limit + available-capital caps, zero IPC/persistence/UI.
 - `npm test` → 42 files, 240/240 pass (zero network).
 - `npm run typecheck` + `npm run build` green.
 
-## Sprint 12 — In-app alerts: pure rules + evaluator, JSON persistence, IPC, panel (2026-09-13)
+## Sprint 12 — In-app alerts: pure rules + evaluator, JSON persistence, IPC, panel (2026-09-13) — view-time only; scheduler-trigger + OS-notify deferred
 
 **Goal:** alerts surface (roadmap §14): pure alert-rule contract +
 evaluator + local persistence + main-owned IPC + props-driven panel +
