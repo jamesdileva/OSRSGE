@@ -8,6 +8,7 @@ import type { OpportunityFiltersWire } from '../core/market/ranking/filters.js';
 import type { MarketSnapshot } from '../core/market/normalization/normalizer.js';
 import type { WatchlistEntry } from '../core/watchlist/watchlist.js';
 import type { AlertRule, AlertRuleDraft } from '../core/alerts/alertRules.js';
+import type { FlipInput, FlipResult } from '../core/market/flips/flipCalculator.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
 export const APP_GET_VERSION = 'app:getVersion';
@@ -49,6 +50,15 @@ export const ALERTS_GET = 'alerts:get';
 export const ALERTS_ADD = 'alerts:add';
 export const ALERTS_REMOVE = 'alerts:remove';
 export const ALERTS_SET_ENABLED = 'alerts:setEnabled';
+
+/**
+ * Sprint 13 slice-2: flip-calculator channel (roadmap §15).
+ * Stateless calculation — main applies the pure calcFlip to the caller's
+ * observed prices and returns the result. No persistence, no market-data
+ * fetching (callers pass buy/sell prices in — calculated values stay
+ * clearly distinct from observed data). Invalid inputs throw fail-closed.
+ */
+export const FLIP_CALCULATE = 'flip:calculate';
 
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
@@ -188,6 +198,24 @@ export interface OsrsApiAlerts {
   setAlertRuleEnabled(request: AlertsSetEnabledRequest): Promise<AlertsGetResponse>;
 }
 
+/**
+ * Sprint 13 slice-2 flip-calculator IPC contract. Request wraps the pure
+ * FlipInput (observed prices + quantity + optional caps); the response
+ * carries the pure FlipResult with cappedByLimit/cappedByCapital flags and
+ * unaffordable-zero semantics preserved verbatim.
+ */
+export interface FlipCalculateRequest {
+  input: FlipInput;
+}
+
+export interface FlipCalculateResponse {
+  result: FlipResult;
+}
+
+export interface OsrsApiFlips {
+  calculateFlip(request: FlipCalculateRequest): Promise<FlipCalculateResponse>;
+}
+
 export interface OsrsApi {
   app: OsrsApiApp;
   /**
@@ -209,4 +237,11 @@ export interface OsrsApi {
    * runtime `typeof !== 'function'` guard (S7/S8/S10/S11 precedent).
    */
   alerts?: OsrsApiAlerts;
+  /**
+   * Sprint 13 slice-2 flip-calculator surface. Optional so a stale preload
+   * predating slice-2 still typechecks; the renderer keeps a runtime
+   * `typeof !== 'function'` guard and falls back to the pure calcFlip
+   * (S7/S8/S10/S11/S12 precedent).
+   */
+  flips?: OsrsApiFlips;
 }

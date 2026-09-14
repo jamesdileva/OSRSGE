@@ -14,6 +14,8 @@ import {
 } from '../../core/alerts/alertRules.js';
 import { DEFAULT_FILTERS, applyFilters, encodeFiltersForIpc } from '../../core/market/ranking/filters.js';
 import type { OpportunityFilters } from '../../core/market/ranking/filters.js';
+import { calcFlip } from '../../core/market/flips/flipCalculator.js';
+import type { FlipInput, FlipResult } from '../../core/market/flips/flipCalculator.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
 import FilterBar from '../components/dashboard/FilterBar.tsx';
 import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
@@ -21,8 +23,9 @@ import PriceChart from '../components/dashboard/PriceChart.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
 import WatchlistPanel from '../components/dashboard/WatchlistPanel.tsx';
 import AlertsPanel from '../components/dashboard/AlertsPanel.tsx';
+import FlipCalculatorPanel from '../components/dashboard/FlipCalculatorPanel.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { addAlertRuleRequest, addWatchedItem, fetchAlertRules, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
+import { addAlertRuleRequest, addWatchedItem, calculateFlipRequest, fetchAlertRules, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -124,6 +127,12 @@ export default function Dashboard({
   const [liveAlertRules, setLiveAlertRules] = useState<AlertRule[] | null>(null);
   const [alertsError, setAlertsError] = useState<string | null>(null);
   const effectiveAlertRules = alertRulesProp ?? liveAlertRules ?? [];
+  // Sprint 13 slice-2: flip result. The Dashboard owns calculation — bridge
+  // calculateFlip when the preload has the flips surface, pure calcFlip
+  // fallback otherwise (stale-preload/browser-mode precedent). No market
+  // data is fetched; the panel supplies observed prices.
+  const [flipResult, setFlipResult] = useState<FlipResult | null>(null);
+  const [flipError, setFlipError] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -273,6 +282,28 @@ export default function Dashboard({
       })
       .catch((err: unknown) => {
         setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleCalculateFlip = (input: FlipInput): void => {
+    if (getDesktopApi()?.flips == null) {
+      try {
+        setFlipResult(calcFlip(input));
+        setFlipError(null);
+      } catch (err: unknown) {
+        setFlipResult(null);
+        setFlipError(err instanceof Error ? err.message : 'Unknown error');
+      }
+      return;
+    }
+    calculateFlipRequest({ input })
+      .then((response) => {
+        setFlipResult(response.result);
+        setFlipError(null);
+      })
+      .catch((err: unknown) => {
+        setFlipResult(null);
+        setFlipError(err instanceof Error ? err.message : 'Unknown error');
       });
   };
 
@@ -506,6 +537,12 @@ export default function Dashboard({
             onRemoveRule={handleRemoveAlert}
             onToggleRule={handleToggleAlert}
           />
+        </>
+      )}
+      {(status === 'idle' || status === 'success') && (
+        <>
+          <h2>Flip calculator</h2>
+          <FlipCalculatorPanel result={flipResult} error={flipError} onCalculate={handleCalculateFlip} />
         </>
       )}
 

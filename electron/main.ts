@@ -5,6 +5,7 @@ import { MARKET_REFRESH_NOW, MARKET_REFRESH_UPDATED } from '../shared/ipc.js';
 import type { MarketRefreshUpdate } from '../shared/ipc.js';
 import { registerAppHandlers } from './ipc/app.handlers.js';
 import { registerAlertsHandlers } from './ipc/alerts.handlers.js';
+import { registerFlipsHandlers } from './ipc/flips.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
@@ -55,6 +56,9 @@ void app.whenReady().then(() => {
     load: () => alertsRepo.load(),
     save: (rules) => alertsRepo.save(rules),
   });
+  // Sprint 13 slice-2: stateless flip calculation (pure calcFlip default;
+  // no repository — nothing persists, callers pass observed prices in).
+  registerFlipsHandlers(ipcMain);
   createWindow();
   // Sprint 10 slice-2: timer runtime on stub-only refresh (D#163 — the
   // refresh advances schedule state; no live pipeline yet). Notify pushes

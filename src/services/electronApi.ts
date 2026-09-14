@@ -3,6 +3,8 @@ import type {
   AlertsGetResponse,
   AlertsRemoveRequest,
   AlertsSetEnabledRequest,
+  FlipCalculateRequest,
+  FlipCalculateResponse,
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
@@ -158,4 +160,18 @@ export async function setAlertRuleEnabledRequest(
     throw new Error('Desktop bridge unavailable');
   }
   return api.alerts.setAlertRuleEnabled(request);
+}
+
+/**
+ * Sprint 13 slice-2 flip calculation via the preload bridge.
+ * Throws when the bridge is absent or the preload predates the flips
+ * surface so callers can fall back to the pure calcFlip
+ * (S7/S8/S10/S11/S12 stale-preload precedent).
+ */
+export async function calculateFlipRequest(request: FlipCalculateRequest): Promise<FlipCalculateResponse> {
+  const api = getDesktopApi();
+  if (api?.flips == null || typeof api.flips.calculateFlip !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.flips.calculateFlip(request);
 }

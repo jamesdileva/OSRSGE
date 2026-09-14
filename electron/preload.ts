@@ -5,6 +5,7 @@ import {
   ALERTS_REMOVE,
   ALERTS_SET_ENABLED,
   APP_GET_VERSION,
+  FLIP_CALCULATE,
   MARKET_GET_HISTORY,
   MARKET_GET_TOP10,
   MARKET_REFRESH_NOW,
@@ -18,6 +19,8 @@ import type {
   AlertsGetResponse,
   AlertsRemoveRequest,
   AlertsSetEnabledRequest,
+  FlipCalculateRequest,
+  FlipCalculateResponse,
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
@@ -72,6 +75,12 @@ const api: OsrsApi = {
       ipcRenderer.invoke(ALERTS_REMOVE, request) as Promise<AlertsGetResponse>,
     setAlertRuleEnabled: (request: AlertsSetEnabledRequest) =>
       ipcRenderer.invoke(ALERTS_SET_ENABLED, request) as Promise<AlertsGetResponse>,
+  },
+  // Sprint 13 slice-2: stateless flip calculation (pure calcFlip main-side;
+  // callers pass observed prices in, calculated values come back out).
+  flips: {
+    calculateFlip: (request: FlipCalculateRequest) =>
+      ipcRenderer.invoke(FLIP_CALCULATE, request) as Promise<FlipCalculateResponse>,
   },
 };
 
