@@ -4,6 +4,56 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 11 (slice 2) — Watchlist view + IPC + UI (2026-09-13)
+
+**Goal:** second watchlist surface (roadmap §13): pure view deriving
+price/change/spread/risk at view time + main-owned IPC persistence +
+props-driven panel + Dashboard integration, still zero scheduler/alerts/
+charts.
+
+**Did:**
+- Part 1 — pure view + store hardening (`efeea6e`): new
+  `core/watchlist/watchlistView.ts` — `buildWatchlistView(entries,
+  opportunities)` returns one `WatchlistViewRow` per entry in store
+  insertion order (first-watch-wins) with matching `Opportunity` attached
+  or `opportunity: null` for unknown/stale ids (graceful placeholder,
+  never a crash); duplicate entry ids dedupe first-wins; frozen-input
+  safe (fresh row objects). `watchlist.ts` + `JsonWatchlistRepository`
+  hardening alongside.
+- Part 2a — watchlist IPC (`6e7800c`): `WATCHLIST_GET/ADD/REMOVE` channels
+  + `WatchlistGetResponse/AddRequest/RemoveRequest`/`OsrsApiWatchlist` in
+  `shared/ipc.ts` (responses return the full updated entry list — single
+  round-trip, no re-fetch); `electron/ipc/watchlist.handlers.ts` (main
+  owns load → pure add/remove → save; clock injectable via `now` dep,
+  defaults to Date.now; GET returns per-entry copies so in-process
+  callers cannot alias); `preload.ts` + `electronApi.ts`
+  (`getWatchlist`/`addWatchedItem`/`removeWatchedItem`) + `main.ts`
+  wiring with the JSON repository.
+- Part 2b — panel + Dashboard (`bb257ee`): new pure
+  `src/components/dashboard/WatchlistPanel.tsx` (props-driven rows,
+  Item/Price/24h/Risk/Score + Remove action, empty-state placeholder,
+  unknown-id graceful row, keyboard-selectable, zero IPC/scheduler/
+  network); `Dashboard.tsx` owns fetching + add/remove persistence and
+  passes derived rows via `buildWatchlistView`; view dedupe first-wins +
+  GET-copy alias fix in this part.
+- Tests: `tests/watchlist/watchlistView.test.ts` +
+  `tests/ipc/watchlist.test.ts` + `tests/ui/watchlist-panel.test.tsx`
+  — 196 total (175 → 196, +21).
+
+**Decisions:**
+- IDs-only over IPC by design (slice-1 rule carried): price/change/
+  spread/risk are derived at view time, never persisted or transferred.
+- Main owns persistence; renderer never touches files (roadmap §17
+  SQLite swap stays backend-only).
+- `watchlist` bridge surface optional (not required like `market` in
+  S7): stale preloads without it still typecheck; renderer keeps
+  runtime `typeof` guards (S7/S8/S10 precedent).
+- Review #108 CLEAR on `bb257ee` (no rework).
+
+**Verified:**
+- `npm test` → 37 files, 196/196 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+
 ## Sprint 11 (slice 1) — Pure watchlist store + JSON persistence (2026-09-13)
 
 **Goal:** first watchlist surface (roadmap §13, mail #99): pure store
