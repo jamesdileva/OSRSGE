@@ -4,6 +4,46 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 13 (slice 1) — Pure flip calculator (2026-09-14)
+
+**Goal:** first flip-calculator surface (roadmap §15): pure
+buy/sell/quantity → gross/tax/net/ROI/capital-efficiency math with
+buy-limit + available-capital caps, zero IPC/persistence/UI.
+
+**Did:**
+- `core/market/flips/flipCalculator.ts` (new, pure): `GE_TAX_RATE`
+  (explicit 1% of sell per unit, matching the scorer's assumed bite and
+  guide §57 — centralized here, never in React) + `calcFlip(input)` →
+  `FlipResult` (unit gross/tax/net, totals over effective units, capital
+  required, ROI + capital-efficiency per guide §55, optional
+  profit-per-hour from the explicit `flipsPerHour` assumption).
+  Effective quantity = min(requested, buyLimit, floor(capital/buy)) with
+  `cappedByLimit`/`cappedByCapital` flags; unaffordable (capital < one
+  unit) is a valid zero result, not an error; losses stay negative (no
+  zero floor). Strict-throw on invalid (non-finite/non-positive prices,
+  non-integer/non-positive quantity/limit, negative capital, bad rate);
+  frozen-input safe.
+- Tests: `tests/flips/flipCalculator.test.ts` — 9 tests (basic math +
+  tax explicitness, loss negativity, limit cap, capital cap, unaffordable
+  zero, combined caps, per-hour estimate, invalid-throw matrix,
+  frozen-input purity) — 240 total (231 → 240).
+
+**Decisions:**
+- Slice-1 stays pure by design: no IPC/persistence/UI (later slices), no
+  market-data fetching (callers pass observed prices in — calculated
+  values stay clearly distinct from observed data per roadmap §15).
+- Tax on the sell side (GE semantics); scorer uses the same 1% assumption
+  off its own price basis — consistent bite, documented in code.
+- ROI and capital-efficiency are the same ratio (net/capital) by the
+  guide §55 definition; both fields kept so the roadmap's calculate list
+  maps 1:1.
+- `profitPerHour` is a caller-supplied execution assumption, never a
+  market-depth claim (guide §56).
+
+**Verified:**
+- `npm test` → 42 files, 240/240 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+
 ## Sprint 12 — In-app alerts: pure rules + evaluator, JSON persistence, IPC, panel (2026-09-13)
 
 **Goal:** alerts surface (roadmap §14): pure alert-rule contract +
