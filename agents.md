@@ -4,6 +4,58 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 13 (slice 2) — Flip-calculator IPC + panel (2026-09-14)
+
+**Goal:** second flip-calculator surface (roadmap §15): stateless
+`flip:calculate` IPC + pure `FlipCalculatorPanel` + Dashboard
+bridge/pure-fallback, zero market-data fetching/persistence. Close out
+review #131 nits.
+
+**Did:**
+- `shared/ipc.ts`: `FLIP_CALCULATE` stateless contract (`flips?`
+  optional — S7/S8/S10/S11/S12 stale-preload precedent); request carries
+  `FlipInput`, response the full `FlipResult` (single round-trip).
+- `electron/ipc/flips.handlers.ts` (new): applies pure `calcFlip` with
+  `?? {}` defaults so absent request/input fails with the pure validator
+  message; async so invalid inputs reject; wired in `main.ts`.
+- `preload.ts` + `electronApi.calculateFlipRequest`: bridge-absent/stale
+  `typeof calculateFlip !== 'function'` guards throwing `Desktop bridge
+  unavailable` for pure fallback.
+- `src/components/dashboard/FlipCalculatorPanel.tsx` (new, pure):
+  props-driven (`result`/`error`/`onCalculate`), `GE_TAX_RATE` label-only,
+  caps flags + unaffordable-zero notice, form-error vs calc-error
+  distinct, zero IPC/network/scheduler/persistence.
+- `Dashboard.tsx`: owns calculation — bridge path when the preload has
+  the flips surface, pure `calcFlip` fallback otherwise; no market-data
+  fetching (panel supplies observed prices).
+- Tests: `tests/ipc/flips.test.ts` (4) + `tests/ui/flip-calculator-
+  panel.test.tsx` (6) — channel, caps+zero semantics, fail-closed matrix
+  incl. absent-request, bridge/stale/delegate guards, form guard, caps
+  echo, zero notice, bridge vs fallback paths — 251 total (240 → 251).
+- Review #131 follow-up (this entry): Dashboard `handleCalculateFlip`
+  now mirrors the `typeof calculateFlip !== 'function'` guard (partial-
+  stale preload takes pure fallback instead of surfacing bridge error);
+  zero-quantity `<p>` notice moved out of `<dl>` (valid HTML); optional
+  parses hoisted to locals (single `parseOptionalNumber` call per field).
+
+**Decisions:**
+- Stateless `flip:calculate` by design (S11 IDs-only / S12 rules-only
+  precedent): no persistence, no scheduler, no market-data fetching —
+  callers pass observed prices in, calculated values stay distinct from
+  observed data per roadmap §15.
+- Main applies the pure calculator; renderer never computes tax itself
+  (centralized `GE_TAX_RATE`, never in React).
+- New `flips` bridge surface optional: stale preloads without it still
+  typecheck; renderer keeps runtime `typeof` guards with pure fallback.
+
+**Verified:**
+- `npm test` → 44 files, 251/251 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+- Review #131 CLEAR on `ffab278` (agent-b re-verified diff + workspace
+  clean); nits non-gating, closed here.
+
+**Commits:** `ffab278` slice-2 IPC + panel; this entry + #131 nits.
+
 ## Sprint 13 (slice 1) — Pure flip calculator (2026-09-14)
 
 **Goal:** first flip-calculator surface (roadmap §15): pure
