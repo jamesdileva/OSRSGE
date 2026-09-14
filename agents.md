@@ -4,6 +4,69 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 12 — In-app alerts: pure rules + evaluator, JSON persistence, IPC, panel (2026-09-13)
+
+**Goal:** alerts surface (roadmap §14): pure alert-rule contract +
+evaluator + local persistence + main-owned IPC + props-driven panel +
+Dashboard renderer-side evaluation, still zero scheduler/OS-notify.
+
+**Did:**
+- Slice-1 — pure rules + evaluator (`e81c783`): new
+  `core/alerts/alertRules.ts` — alert-rule contract (rule id, add/remove/
+  setEnabled pure helpers) + `evaluateAlerts` over `Opportunity[]`
+  returning fired events; invalid stored rules skip fail-closed; frozen-
+  input safe. Tests: `tests/alerts/alertRules.test.ts`.
+- Slice-2 part 1 — JSON repository (`b15b2b7`): new
+  `core/alerts/AlertRepository.ts` (`load`/`save` interface — callers
+  never touch JSON directly so a roadmap §17 SQLite swap stays backend-
+  only) + `storage/json/JsonAlertRepository.ts` (whole-list document,
+  atomic tmp+rename writes mirroring `JsonHistoryRepository`/`JsonWatch-
+  listRepository`, tolerant reads, strict saves) + `alertsFile(baseDir)`
+  in `storage/paths.ts`. Tests:
+  `tests/alerts/alertRepository.test.ts`.
+- Slice-2 part 2 — alerts IPC (`9b9fa36`): `ALERTS_GET/ADD/REMOVE/
+  SET_ENABLED` channels + request/response types in `shared/ipc.ts`
+  (responses return the full updated rule list — single round-trip, no
+  re-fetch); `electron/ipc/alerts.handlers.ts` (main owns load → pure
+  add/remove/setEnabled → save; clock injectable via `now` dep, defaults
+  to Date.now); `preload.ts` + `electronApi.ts` + `main.ts` wiring.
+  Tests: `tests/ipc/alerts.test.ts` — 221 total.
+- Slice-2 part 3 — panel + Dashboard (`bd45cc8`): new pure
+  `src/components/dashboard/AlertsPanel.tsx` (props-driven rules table +
+  fired-events list + add-form, empty states, zero IPC/scheduler/network/
+  OS-notify); `Dashboard.tsx` owns fetching + add/remove/toggle
+  persistence and evaluates renderer-side via `evaluateAlerts` over the
+  UNFILTERED effective opportunities (S11 unfiltered-watchlist
+  precedent) with `Date.now()` as `triggeredAt` only. Tests:
+  `tests/ui/alerts-panel.test.tsx` (7) + no-save fail-closed tests —
+  231 total.
+- Review #120 nits closed in part 3: ADD handler now
+  `((request ?? {}).draft ?? {})` so absent request/draft reaches pure
+  validation and throws `Invalid rule id` instead of TypeError (+ test
+  asserting the clean message and no-save); REMOVE/SET_ENABLED already
+  `?.`/`?? {}` safe. Review #122 CLEAR on `bd45cc8` (agent-b re-verified
+  231/231 locally, 41 files).
+
+**Decisions:**
+- Rules-only over IPC by design (S11 IDs-only precedent): evaluation
+  happens renderer-side at view time, never persisted or transferred.
+- Main owns persistence; renderer never touches files (roadmap §17
+  SQLite swap stays backend-only).
+- New `alerts` bridge surface optional (S7/S8/S10/S11 precedent): stale
+  preloads without it still typecheck; renderer keeps runtime `typeof`
+  guards; bridge-absent mutations use pure helpers in try/catch
+  surfacing `alertsError` fail-closed.
+- Panel `Date.now` id stamping accepted as UI-local draft id; main owns
+  `createdAt` via injected clock; same-ms double-submit duplicate-id
+  collision fails closed in pure `addAlertRule` (surfaced error, no
+  corrupt state) — collision-proof ids noted as non-gating future nit.
+- Slice stays in-app by design: no scheduler triggers, no OS
+  notifications, scorer/risk/confidence untouched.
+
+**Verified:**
+- `npm test` → 41 files, 231/231 pass (zero network).
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+
 ## Sprint 11 (slice 2) — Watchlist view + IPC + UI (2026-09-13)
 
 **Goal:** second watchlist surface (roadmap §13): pure view deriving
