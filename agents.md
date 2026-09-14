@@ -4,6 +4,47 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 16 (slice 1) — Pure data-quality core (2026-09-14)
+
+**Goal:** first trust surface (roadmap §18): pure freshness / missing /
+duplicate / impossible / spike / frozen-feed / provider-health checks with
+zero IPC/persistence/UI/scheduler/fetch, per review #155 gates.
+
+**Did:**
+- `core/market/quality/dataQuality.ts` (new, pure): `stalenessMs` /
+  `freshnessScore` (primary 1→0 over `STALE_AFTER_MS` = 15 min) /
+  `isStaleData` (derived: stale ⇔ score ≤ 0, single truth) +
+  `countMissingSides` (one-sided partials the normalizer keeps) /
+  `trackMissingItems` (fresh sorted gap list) + `hasDuplicateTimestamp` /
+  `isDuplicateBatch` (timestamp-exists, matching `JsonHistoryRepository`;
+  content-equal + new timestamp is NOT a duplicate — it is `isFrozenFeed`)
+  + `isImpossibleSnapshot` / `countImpossible` (positive-finite but absurd:
+  any side > `MAX_GE_PRICE_GP` 2^31−1 or high < low crossed market →
+  skip-count, never throw) + `isPriceSpike` (default 50%, suspicious not
+  impossible) / `isFrozenFeed` (≥3 identical mids) + `assessProviderHealth`
+  (pure fn of total/invalid/excluded/staleness/missing: DOWN >50% err or
+  >60m stale; DEGRADED stale/>10%/missing; else HEALTHY). Explicit `nowMs`,
+  frozen-input safe, strict-throw invalid (NaN/non-finite/≤0 shapes the
+  normalizer never emits), fresh outputs.
+- Tests: `tests/quality/dataQuality.test.ts` — 14 tests incl. both-direction
+  non-overlap disconfirm (normalizer-keeps-but-quality-flags: stale pull +
+  duplicate batch + crossed/over-cap + spike; quality-passes-but-
+  normalizer-excludes + `computeConfidence` thin-history penalty) — 293
+  total (279 → 293).
+
+**Decisions:**
+- Non-overlap documented in code: ≤0/non-finite stays the normalizer's
+  exclusion; timestamp-dedupe persistence stays the repository's;
+  `freshnessFactor` (<2h/48h) stays ranking evidence weight — quality fires
+  only where those stay silent, proven both directions in tests.
+- Invalid (caller bug) throws; impossible (market absurdity) skip-counts;
+  suspicious (spike/frozen) flags-but-keeps — guide §45 mapping explicit.
+- Slice-2 IPC/panel explicitly out (review #155 gate 5).
+
+**Verified:**
+- `npm test` → 48 files, 293/293 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+
 ## Sprint 15 (slice 1) — Pure weight-variant comparison over S14 harness (2026-09-14)
 
 **Goal:** first weight-tuning surface (roadmap §17, guide §51): pure
