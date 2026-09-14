@@ -4,6 +4,55 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 14 (slice 2) — Scorer-over-snapshots backtest harness, past-only (2026-09-14)
+
+**Goal:** second backtesting surface (roadmap §16, guide §50): wire the
+real scorer over time-sliced snapshots into the slice-1 `rankAt` loop,
+past-only by construction, plus the two slice-1 summary correctness fixes
+(review #137). Still zero IPC/persistence/UI/scheduler; S15 weight
+comparison stays out.
+
+**Did:**
+- `core/market/backtest/scorerBacktest.ts` (new, pure):
+  `sliceHistoryAt`/`sliceHistoriesAt` (past-only `timestamp <= T` views,
+  fresh arrays/maps, strict-throw on non-finite T),
+  `snapshotsToPriceSeries` (midpoint projection for settlement, unpriced
+  snapshots skipped, ascending sort), `createScorerRankAt` (per T:
+  past-only slice → per-item `computeMetrics` with the liquidity universe
+  built from the same past-only view → `rankOpportunities` → top-N picks
+  entered at verbatim T with the scorer's own `currentPrice`; unknown ids
+  fall back to `Item <id>` per S2; frozen-input safe; single config per
+  pass so S15 variants run separately).
+- `backtester.ts` review-#137 fixes: `summarizeTrades` derives wins from
+  `returnPct > 0` (caller `win` flags ignored — inconsistent flags can no
+  longer corrupt winRate/FP/hitRate, ties stay losers) and sorts an
+  internal (exitTime, entryTime, itemId) copy before the equity loop (the
+  documented order now holds for permuted inputs, not just round-trips).
+- Tests: `tests/backtest/scorerBacktest.test.ts` — 10 tests (slice
+  freshness + invalid-throw, midpoint/skip/sort projection, top-N wiring
+  with verbatim-T entry, past-only no-future-leak disconfirm — crash/spike
+  futures leave `rankAt(T)` identical to the truncated view, frozen
+  purity + fresh picks, topN/NaN guards, inconsistent-flag summary fix,
+  permutation-stable drawdown, rank → settle → summarize end-to-end) —
+  273 total (263 → 273).
+
+**Decisions:**
+- Full-history-in is safe: callers pass stored history including future
+  points; the harness slices per T internally, so the past-only contract
+  lives in one place instead of every caller.
+- `historyMinutes` = T − earliest past point, `stalenessMinutes` = T −
+  latest past point, `observationCount` = past length; expected counts stay
+  undefined (neutral) — depth signals stay honest without inventing a
+  sampling cadence.
+- Entry price is the scorer's `currentPrice`, never a caller fill — the
+  measured return starts exactly where the ranking saw value.
+- Third review nit (itemId 0 vs watchlist ≤0, ascending evaluationTimes
+  unenforced) left as-is: documentation-level, non-gating, untouched.
+
+**Verified:**
+- `npm test` → 46 files, 273/273 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+
 ## Sprint 14 (slice 1) — Pure backtesting core (2026-09-14)
 
 **Goal:** first backtesting surface (roadmap §16, arch §31, guide §§49–50):
