@@ -35,7 +35,10 @@ export function registerAlertsHandlers(ipcMain: IpcMainHandler, deps: AlertsHand
   });
 
   ipcMain.handle(ALERTS_ADD, async (_event: unknown, request?: unknown): Promise<AlertsGetResponse> => {
-    const draft = (request as AlertsAddRequest | undefined)?.draft;
+    // ?? {} defaults (SET_ENABLED precedent): an absent request/draft fails
+    // with the clean Invalid-rule message, not a TypeError on .draft/.id.
+    // Still fail-closed — the pure helper throws before any save.
+    const draft = ((request as AlertsAddRequest | undefined) ?? {}).draft ?? {};
     const current = await deps.load();
     // Pure helper throws on invalid drafts/duplicate ids (fail-closed).
     const updated = addAlertRule(current, draft as AlertRuleDraft, nowMs());

@@ -104,6 +104,47 @@ describe('Sprint 12 slice-2 part 2 alerts IPC (main half + bridge guards, offlin
     expect(save).not.toHaveBeenCalled();
   });
 
+  it('remove rejects garbage ids fail-closed (no save, review #120 nit 1)', async () => {
+    const { handlers, ipcMain } = mockIpc();
+    const save = vi.fn();
+    registerAlertsHandlers(ipcMain, {
+      load: () => [rule('a')],
+      save,
+    });
+    const remove = handlers.get(ALERTS_REMOVE);
+    await expect(remove?.(undefined, {})).rejects.toThrow();
+    await expect(remove?.(undefined, { id: '' })).rejects.toThrow();
+    await expect(remove?.(undefined, undefined)).rejects.toThrow();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('setEnabled rejects garbage inputs fail-closed (no save, review #120 nit 1)', async () => {
+    const { handlers, ipcMain } = mockIpc();
+    const save = vi.fn();
+    registerAlertsHandlers(ipcMain, {
+      load: () => [rule('a')],
+      save,
+    });
+    const toggle = handlers.get(ALERTS_SET_ENABLED);
+    await expect(toggle?.(undefined, { id: 'a', enabled: 'yes' })).rejects.toThrow();
+    await expect(toggle?.(undefined, { id: '', enabled: true })).rejects.toThrow();
+    await expect(toggle?.(undefined, undefined)).rejects.toThrow();
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it('add with an absent request fails with the clean Invalid-rule message (review #120 nit 2)', async () => {
+    const { handlers, ipcMain } = mockIpc();
+    const save = vi.fn();
+    registerAlertsHandlers(ipcMain, {
+      load: () => [],
+      save,
+      now: () => T0,
+    });
+    const add = handlers.get(ALERTS_ADD);
+    await expect(add?.(undefined, undefined)).rejects.toThrow('Invalid rule id');
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it('remove drops the id and persists (unknown id is a fresh-array no-op)', async () => {
     const { handlers, ipcMain } = mockIpc();
     let stored: AlertRule[] = [rule('a'), rule('b')];

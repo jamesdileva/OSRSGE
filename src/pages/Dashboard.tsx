@@ -5,6 +5,13 @@ import type { Opportunity } from '../../core/market/ranking/types.js';
 import type { WatchlistEntry } from '../../core/watchlist/watchlist.js';
 import { addToWatchlist as addToWatchlistPure, removeFromWatchlist as removeFromWatchlistPure } from '../../core/watchlist/watchlist.js';
 import { buildWatchlistView } from '../../core/watchlist/watchlistView.js';
+import type { AlertRule, AlertRuleDraft } from '../../core/alerts/alertRules.js';
+import {
+  addAlertRule as addAlertRulePure,
+  evaluateAlerts,
+  removeAlertRule as removeAlertRulePure,
+  setAlertRuleEnabled as setAlertRuleEnabledPure,
+} from '../../core/alerts/alertRules.js';
 import { DEFAULT_FILTERS, applyFilters, encodeFiltersForIpc } from '../../core/market/ranking/filters.js';
 import type { OpportunityFilters } from '../../core/market/ranking/filters.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
@@ -13,8 +20,9 @@ import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
 import PriceChart from '../components/dashboard/PriceChart.tsx';
 import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx';
 import WatchlistPanel from '../components/dashboard/WatchlistPanel.tsx';
+import AlertsPanel from '../components/dashboard/AlertsPanel.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { addWatchedItem, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeWatchedItem } from '../services/electronApi.ts';
+import { addAlertRuleRequest, addWatchedItem, fetchAlertRules, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -39,6 +47,19 @@ export interface DashboardProps {
   watchlist?: WatchlistEntry[];
   onAddWatch?: (itemId: number) => void;
   onRemoveWatch?: (itemId: number) => void;
+  /**
+   * Sprint 12 slice-2 part 3: optional props-path alert rules. When defined,
+   * the Dashboard renders them directly (offline-pure, zero IPC, evaluated
+   * renderer-side via evaluateAlerts) and reports add/remove/toggle via the
+   * callbacks. When undefined, the Dashboard fetches via fetchAlertRules and
+   * persists via add/remove/setEnabled round-trips, falling back to an
+   * in-memory list in bridge-absent browser mode. Delivery is in-app only
+   * (no scheduler hook, no OS notification — roadmap §14).
+   */
+  alertRules?: AlertRule[];
+  onAddAlert?: (draft: AlertRuleDraft) => void;
+  onRemoveAlert?: (id: string) => void;
+  onToggleAlert?: (id: string, enabled: boolean) => void;
 }
 
 export default function Dashboard({
@@ -52,6 +73,10 @@ export default function Dashboard({
   watchlist: watchlistProp,
   onAddWatch,
   onRemoveWatch,
+  alertRules: alertRulesProp,
+  onAddAlert,
+  onRemoveAlert,
+  onToggleAlert,
 }: DashboardProps): JSX.Element {
   const [bridgeStatus, setBridgeStatus] = useState<DashboardStatus>(() =>
     statusProp ?? (isDesktopBridgeAvailable() ? 'loading' : 'idle'),
@@ -92,6 +117,13 @@ export default function Dashboard({
   const [liveWatchlist, setLiveWatchlist] = useState<WatchlistEntry[] | null>(null);
   const [watchlistError, setWatchlistError] = useState<string | null>(null);
   const effectiveWatchlist = watchlistProp ?? liveWatchlist ?? [];
+  // Sprint 12 slice-2 part 3: alert rules. Props path renders directly with
+  // zero IPC; live path fetches via the bridge once and persists add/remove/
+  // toggle round-trips; bridge-absent mode keeps an in-memory list via the
+  // pure store helpers. Evaluation is renderer-side (evaluateAlerts below).
+  const [liveAlertRules, setLiveAlertRules] = useState<AlertRule[] | null>(null);
+  const [alertsError, setAlertsError] = useState<string | null>(null);
+  const effectiveAlertRules = alertRulesProp ?? liveAlertRules ?? [];
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -126,6 +158,11 @@ export default function Dashboard({
   // null rows. Derived from the UNFILTERED effective list so a watched item
   // hidden by a filter still shows in the watchlist.
   const watchlistRows = buildWatchlistView(effectiveWatchlist, effectiveOpportunities);
+  // Sprint 12 slice-2 part 3: in-app alert evaluation. Renderer-side via the
+  // pure evaluateAlerts over the UNFILTERED effective list (a rule on an item
+  // hidden by a view filter still fires); invalid stored rules are skipped
+  // fail-closed by the evaluator. In-app only: no scheduler, no OS notify.
+  const firedAlerts = evaluateAlerts(effectiveAlertRules, effectiveOpportunities, Date.now());
   const isSelectedWatched =
     effectiveSelectedItemId !== null && effectiveWatchlist.some((entry) => entry.itemId === effectiveSelectedItemId);
 
@@ -164,6 +201,78 @@ export default function Dashboard({
       })
       .catch((err: unknown) => {
         setWatchlistError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleAddAlert = (draft: AlertRuleDraft): void => {
+    if (alertRulesProp !== undefined) {
+      onAddAlert?.(draft);
+      return;
+    }
+    if (getDesktopApi()?.alerts == null) {
+      try {
+        setLiveAlertRules((prev) => addAlertRulePure(prev ?? [], draft, Date.now()));
+        setAlertsError(null);
+      } catch (err: unknown) {
+        setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      }
+      return;
+    }
+    addAlertRuleRequest({ draft })
+      .then((response) => {
+        setLiveAlertRules(response.rules);
+        setAlertsError(null);
+      })
+      .catch((err: unknown) => {
+        setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleRemoveAlert = (id: string): void => {
+    if (alertRulesProp !== undefined) {
+      onRemoveAlert?.(id);
+      return;
+    }
+    if (getDesktopApi()?.alerts == null) {
+      try {
+        setLiveAlertRules((prev) => removeAlertRulePure(prev ?? [], id));
+        setAlertsError(null);
+      } catch (err: unknown) {
+        setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      }
+      return;
+    }
+    removeAlertRuleRequest({ id })
+      .then((response) => {
+        setLiveAlertRules(response.rules);
+        setAlertsError(null);
+      })
+      .catch((err: unknown) => {
+        setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleToggleAlert = (id: string, enabled: boolean): void => {
+    if (alertRulesProp !== undefined) {
+      onToggleAlert?.(id, enabled);
+      return;
+    }
+    if (getDesktopApi()?.alerts == null) {
+      try {
+        setLiveAlertRules((prev) => setAlertRuleEnabledPure(prev ?? [], id, enabled));
+        setAlertsError(null);
+      } catch (err: unknown) {
+        setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      }
+      return;
+    }
+    setAlertRuleEnabledRequest({ id, enabled })
+      .then((response) => {
+        setLiveAlertRules(response.rules);
+        setAlertsError(null);
+      })
+      .catch((err: unknown) => {
+        setAlertsError(err instanceof Error ? err.message : 'Unknown error');
       });
   };
 
@@ -290,6 +399,34 @@ export default function Dashboard({
     };
   }, [watchlistProp]);
 
+  // Sprint 12 slice-2 part 3 alerts fetch: props path (alertRulesProp
+  // defined) never fetches; stale preloads (alerts == null) and
+  // bridge-absent mode skip silently with the in-memory list.
+  useEffect(() => {
+    if (alertRulesProp !== undefined) {
+      return;
+    }
+    if (getDesktopApi()?.alerts == null) {
+      return;
+    }
+    let cancelled = false;
+    fetchAlertRules()
+      .then((response) => {
+        if (!cancelled) {
+          setLiveAlertRules(response.rules);
+          setAlertsError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [alertRulesProp]);
+
   return (
     <section aria-label="Market dashboard">
       <MarketSummary summary={viewModel.summary} />
@@ -352,6 +489,22 @@ export default function Dashboard({
             selectedItemId={effectiveSelectedItemId}
             onSelectItem={handleSelectItem}
             onRemoveItem={handleRemoveWatch}
+          />
+        </>
+      )}
+      {(status === 'idle' || status === 'success') && (
+        <>
+          <h2>Alerts</h2>
+          {alertsError !== null && (
+            <p className="notice notice-error">Alerts unavailable: {alertsError}</p>
+          )}
+          <AlertsPanel
+            rules={effectiveAlertRules}
+            events={firedAlerts}
+            selectedItemId={effectiveSelectedItemId}
+            onAddRule={handleAddAlert}
+            onRemoveRule={handleRemoveAlert}
+            onToggleRule={handleToggleAlert}
           />
         </>
       )}
