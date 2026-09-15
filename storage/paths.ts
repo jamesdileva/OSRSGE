@@ -26,6 +26,11 @@ export function historyDir(baseDir: string): string {
   return path.join(baseDir, 'history');
 }
 
+/** SQLite history file (S18). Sibling of `history/`, never inside it. */
+export function historyDbFile(baseDir: string): string {
+  return path.join(baseDir, 'history.db');
+}
+
 export function watchlistFile(baseDir: string): string {
   return path.join(baseDir, 'watchlist.json');
 }
