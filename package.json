@@ -13,6 +13,7 @@
     "check:market": "vite-node scripts/check-market.ts",
     "check:analytics": "vite-node scripts/check-analytics.ts",
     "check:ablation": "vite-node scripts/check-ablation.ts",
+    "check:storage-bench": "vite-node scripts/check-storage-bench.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

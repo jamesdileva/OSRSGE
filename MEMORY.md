@@ -1,12 +1,11 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: Sprint 16 slice-2 DONE + CLEAR (review #170/#172) —
-stateless quality:assess IPC + pure DataQualityPanel + Dashboard
-bridge/pure-fallback, zero fetch/persist/scheduler. Tests 309/309 +
-typecheck + build green; pushed c8f4d99, HEAD==origin/main, tree clean.
-Open threads: S17 measurement-only slice next per review #176 gates
-(board #29 active); S15 auto-search still out; S16 full-batch quality
-context unwired; watch no-profit rho 0.9819, staleness Infinity,
+Current goal: Sprint 17 bench DONE — full-week JSON measurement says
+MIGRATE (7d 1.033 GiB > 1 GiB, history p95 9458.9ms > 1000ms, latest
+p95 4.1ms passes). Tests 313/313 + typecheck + build green. Next:
+SQLite migration behind untouched repository interfaces (board #30
+closing); S15 auto-search still out; S16 full-batch quality context
+unwired; watch no-profit rho 0.9819, staleness Infinity,
 frozenFeed/health/labels, bridgeStatus race, alert-id collision.
 Key learnings: quality non-overlap — ≤0/non-finite stays normalizer
 exclusion (quality strict-throws it as caller bug), timestamp-dedupe

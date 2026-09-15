@@ -4,6 +4,56 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 17 (bench) — Storage-bottleneck measurement, MIGRATE verdict (2026-09-15)
+
+**Goal:** cheapest disconfirm for roadmap §19 (review #178): measure the
+JSON history backend at full-week scale before any SQLite migration. No
+schema/migration/dep/interface change — measurement only.
+
+**Did:**
+- `core/history/storageBench.ts` (new, pure): `makeBenchSnapshot`
+  (deterministic full normalized shape —
+  itemId/timestamp/high/low/highTime/lowTime/volume, never minimal
+  fixtures), `summarizeLatencies` (nearest-rank mean/p95/min/max,
+  fail-closed on empty/NaN), `evaluateStorageVerdict` (SKIP unless 7d
+  total > 1 GiB OR history p95 > 1000 ms OR latest p95 > 500 ms).
+- `scripts/check-storage-bench.ts` (new, manual tool + `npm run
+  check:storage-bench`, `--quick` smoke): builds the full simulated week
+  (2016 pulls = 7d × 288/day @ 5 min, 4534 items/pull) in a temp dir,
+  runs prod-configured 7-day prune, then ≥20 repeats each of
+  `getItemHistory` 7d-range + `getLatestSnapshot`. Zero network/timers;
+  temp dir removed afterwards.
+- Tests: `tests/storage/storageBench.test.ts` — 4 tests (full-shape
+  snapshot, stats + rejection, verdict matrix, small-week repo
+  round-trip through the prod-prune path) — 313 total (309 → 313).
+
+**Raw numbers (full bench, `npm run check:storage-bench`):**
+- Bytes/snapshot assumption: full normalized shape at 4534 items/pull;
+  first file 550071 bytes (~121.3 bytes/snapshot).
+- Post-prune: 2016 files, 1109016748 bytes (1.033 GiB); prod 7-day prune
+  removed 0 (whole simulated week inside the retention window — file
+  count reflects prune-on-save reality, not unbounded growth).
+- `getItemHistory` 7d #4151: n=20 mean=8235.2 ms p95=9458.9 ms
+  min=5644.8 ms max=10899.0 ms.
+- `getLatestSnapshot` #4151: n=20 mean=3.2 ms p95=4.1 ms min=2.6 ms
+  max=6.9 ms (newest-first early exit — week-size independent).
+- Env: node v24.14.1 win32/x64, AMD Ryzen 5 5500, 15.9 GiB RAM
+  (machine-dependent; rerun on target hardware before release tuning).
+
+**Verdict: MIGRATE** — 7-day total 1109016748 bytes > 1 GiB AND history
+p95 9458.9 ms > 1000 ms (latest p95 4.1 ms passes). The full-week
+single-item scan parses ~1.1 GiB of JSON per call (~8 s mean); the
+newest-only read stays trivial. SQLite migration (roadmap §19 tables)
+is warranted; repository interfaces stay untouched so analytics never
+notices the swap.
+
+**Verified:**
+- `npm test` → 52 files, 313/313 pass (bench script itself is manual,
+  never part of the suite).
+- `npm run typecheck` + `npm run build` green.
+- Full bench measured, not extrapolated; `--quick` (12 pulls) smoke
+  green for CI-speed sanity.
+
 ## Sprint 16 (slice 2) — Stateless quality IPC + pure DataQualityPanel (2026-09-14)
 
 **Goal:** second trust surface (roadmap §18): stateless `quality:assess`
