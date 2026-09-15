@@ -4,6 +4,71 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 16 (slice 2) — Stateless quality IPC + pure DataQualityPanel (2026-09-14)
+
+**Goal:** second trust surface (roadmap §18): stateless `quality:assess`
+IPC + pure `DataQualityPanel` + Dashboard bridge/pure-fallback, zero
+market-data fetching/persistence/scheduler. Close out review #170.
+
+**Did:**
+- `core/market/quality/qualityAssessment.ts` (new, pure): `assessDataQuality`
+  orchestrator — single truth over the slice-1 primitives so the handler,
+  the renderer fallback, and the panel never re-combine primitives in three
+  places. Latest timestamp = max snapshot timestamp; empty batch is fully
+  stale at `nowMs` (no observations = no freshness evidence);
+  `missingItems` empty when universe unchecked; `duplicateBatch` null with
+  no candidate/store context, fail-closed throw on partial duplicate
+  context; `health` null with no counters, fail-closed throw on partial
+  counters. Explicit `nowMs`, frozen-input safe, fresh outputs.
+- `shared/ipc.ts`: `QUALITY_ASSESS` stateless contract (`input` wraps the
+  pure `QualityAssessmentInput` — snapshots + explicit `nowMs` + optional
+  universe/store/counter context; response carries the pure
+  `QualityAssessment` verbatim); `OsrsApiQuality` optional surface.
+- `electron/ipc/quality.handlers.ts` (new): applies pure `assessDataQuality`
+  with `?? {}` defaults so absent request/input fails with the pure
+  validator message; async so invalid inputs reject; wired in `main.ts`.
+- `preload.ts` + `electronApi.assessQualityRequest`: bridge-absent/stale
+  `typeof assessQuality !== 'function'` guards with pure fallback.
+- `src/components/dashboard/DataQualityPanel.tsx` (new, pure):
+  props-driven (`assessment`/`error`/`onAssess`), assessed-trust display
+  only (freshness % + stale/fresh, staleness s-ago, missing sides/items,
+  impossible count, duplicate new/already-stored/not-checked, health
+  status + reason / not-checked), zero IPC/network/scheduler/persistence.
+- `Dashboard.tsx`: owns assessment — bridge path when the preload has the
+  quality surface, pure `assessDataQuality` fallback otherwise; input is
+  the `historyPoints` batch already held (no fetch).
+- Tests: `tests/quality/qualityAssessment.test.ts` +
+  `tests/ipc/quality.test.ts` + `tests/ui/data-quality-panel.test.tsx` —
+  16 tests (fresh/stale/duplicate/DOWN verdicts, fail-closed matrix incl.
+  absent-request + partial duplicate/counter context, bridge
+  absent/stale/delegate guards, panel verdict + bridge/fallback paths) —
+  309 total (293 → 309).
+
+**Decisions:**
+- Stateless `quality:assess` by design (S13 `flip:calculate` precedent): no
+  persistence, no scheduler, no market-data fetching — callers pass the
+  observed batch in, assessed trust stays distinct from observed data.
+- Main applies the pure orchestrator; renderer never recombines
+  slice-1 primitives itself (single-truth orchestrator shared both sides).
+- New `quality` bridge surface optional: stale preloads without it still
+  typecheck; renderer keeps runtime `typeof` guards with pure fallback.
+
+**Verified:**
+- `npm test` → 51 files, 309/309 pass (zero network).
+- `npm run typecheck` + `npm run build` green.
+- Review #170 CLEAR on `aadb53b` (agent-b re-verified git clean, 309/309,
+  typecheck+build green); nits non-gating, carried below.
+
+**Carried nits (non-gating, review #170):**
+- Dashboard assesses the single-item `historyPoints` batch, so
+  duplicate/health read `not checked` until a full-batch context is wired.
+- Empty-batch `stalenessMs = nowMs` works only because `Date.now()` is
+  epoch-huge — explicit `Infinity` would be cleaner.
+- S16 slice-1 nits still open (frozenFeed windowed-run, health errorRate
+  uncapped, `freshnessScore` vs `freshnessFactor` label).
+
+**Commits:** `aadb53b` slice-2 IPC + panel; this entry close-out.
+
 ## Sprint 16 (slice 1) — Pure data-quality core (2026-09-14)
 
 **Goal:** first trust surface (roadmap §18): pure freshness / missing /
