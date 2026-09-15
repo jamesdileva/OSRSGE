@@ -16,6 +16,8 @@ import { DEFAULT_FILTERS, applyFilters, encodeFiltersForIpc } from '../../core/m
 import type { OpportunityFilters } from '../../core/market/ranking/filters.js';
 import { calcFlip } from '../../core/market/flips/flipCalculator.js';
 import type { FlipInput, FlipResult } from '../../core/market/flips/flipCalculator.js';
+import { assessDataQuality } from '../../core/market/quality/qualityAssessment.js';
+import type { QualityAssessment } from '../../core/market/quality/qualityAssessment.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
 import FilterBar from '../components/dashboard/FilterBar.tsx';
 import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
@@ -24,8 +26,9 @@ import TopOpportunityTable from '../components/dashboard/TopOpportunityTable.tsx
 import WatchlistPanel from '../components/dashboard/WatchlistPanel.tsx';
 import AlertsPanel from '../components/dashboard/AlertsPanel.tsx';
 import FlipCalculatorPanel from '../components/dashboard/FlipCalculatorPanel.tsx';
+import DataQualityPanel from '../components/dashboard/DataQualityPanel.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { addAlertRuleRequest, addWatchedItem, calculateFlipRequest, fetchAlertRules, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
+import { addAlertRuleRequest, addWatchedItem, assessQualityRequest, calculateFlipRequest, fetchAlertRules, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -133,6 +136,12 @@ export default function Dashboard({
   // data is fetched; the panel supplies observed prices.
   const [flipResult, setFlipResult] = useState<FlipResult | null>(null);
   const [flipError, setFlipError] = useState<string | null>(null);
+  // Sprint 16 slice-2: quality verdict. The Dashboard owns assessment —
+  // bridge assessQuality when the preload has the quality surface, pure
+  // assessDataQuality fallback otherwise (S13 flip precedent). Input is the
+  // history batch already held (no fetch); empty when nothing is loaded.
+  const [qualityAssessment, setQualityAssessment] = useState<QualityAssessment | null>(null);
+  const [qualityError, setQualityError] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -282,6 +291,30 @@ export default function Dashboard({
       })
       .catch((err: unknown) => {
         setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleAssessQuality = (): void => {
+    const input = { snapshots: historyPoints ?? [], nowMs: Date.now() };
+    const api = getDesktopApi();
+    if (api?.quality == null || typeof api.quality.assessQuality !== 'function') {
+      try {
+        setQualityAssessment(assessDataQuality(input));
+        setQualityError(null);
+      } catch (err: unknown) {
+        setQualityAssessment(null);
+        setQualityError(err instanceof Error ? err.message : 'Unknown error');
+      }
+      return;
+    }
+    assessQualityRequest({ input })
+      .then((response) => {
+        setQualityAssessment(response.assessment);
+        setQualityError(null);
+      })
+      .catch((err: unknown) => {
+        setQualityAssessment(null);
+        setQualityError(err instanceof Error ? err.message : 'Unknown error');
       });
   };
 
@@ -544,6 +577,12 @@ export default function Dashboard({
         <>
           <h2>Flip calculator</h2>
           <FlipCalculatorPanel result={flipResult} error={flipError} onCalculate={handleCalculateFlip} />
+        </>
+      )}
+      {(status === 'idle' || status === 'success') && (
+        <>
+          <h2>Data quality</h2>
+          <DataQualityPanel assessment={qualityAssessment} error={qualityError} onAssess={handleAssessQuality} />
         </>
       )}
 

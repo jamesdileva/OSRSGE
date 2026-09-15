@@ -7,6 +7,7 @@ import { registerAppHandlers } from './ipc/app.handlers.js';
 import { registerAlertsHandlers } from './ipc/alerts.handlers.js';
 import { registerFlipsHandlers } from './ipc/flips.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
+import { registerQualityHandlers } from './ipc/quality.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
@@ -59,6 +60,9 @@ void app.whenReady().then(() => {
   // Sprint 13 slice-2: stateless flip calculation (pure calcFlip default;
   // no repository — nothing persists, callers pass observed prices in).
   registerFlipsHandlers(ipcMain);
+  // Sprint 16 slice-2: stateless quality assessment (pure assessDataQuality
+  // default; no repository — nothing persists, callers pass the batch in).
+  registerQualityHandlers(ipcMain);
   createWindow();
   // Sprint 10 slice-2: timer runtime on stub-only refresh (D#163 — the
   // refresh advances schedule state; no live pipeline yet). Notify pushes

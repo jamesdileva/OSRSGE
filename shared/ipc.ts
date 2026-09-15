@@ -9,6 +9,7 @@ import type { MarketSnapshot } from '../core/market/normalization/normalizer.js'
 import type { WatchlistEntry } from '../core/watchlist/watchlist.js';
 import type { AlertRule, AlertRuleDraft } from '../core/alerts/alertRules.js';
 import type { FlipInput, FlipResult } from '../core/market/flips/flipCalculator.js';
+import type { QualityAssessment, QualityAssessmentInput } from '../core/market/quality/qualityAssessment.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
 export const APP_GET_VERSION = 'app:getVersion';
@@ -59,6 +60,16 @@ export const ALERTS_SET_ENABLED = 'alerts:setEnabled';
  * clearly distinct from observed data). Invalid inputs throw fail-closed.
  */
 export const FLIP_CALCULATE = 'flip:calculate';
+
+/**
+ * Sprint 16 slice-2: data-quality assessment channel (roadmap §18).
+ * Stateless assessment — main applies the pure assessDataQuality to the
+ * caller's observed batch and returns the verdict. No persistence, no
+ * market-data fetching (callers pass normalized snapshots in — assessed
+ * trust stays clearly distinct from observed data). Invalid inputs throw
+ * fail-closed.
+ */
+export const QUALITY_ASSESS = 'quality:assess';
 
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
@@ -216,6 +227,25 @@ export interface OsrsApiFlips {
   calculateFlip(request: FlipCalculateRequest): Promise<FlipCalculateResponse>;
 }
 
+/**
+ * Sprint 16 slice-2 data-quality IPC contract. Request wraps the pure
+ * QualityAssessmentInput (observed snapshots + explicit nowMs + optional
+ * universe/store/counter context); the response carries the pure
+ * QualityAssessment verbatim (freshness/stale, missing sides/items,
+ * impossible count, duplicate flag, provider health).
+ */
+export interface QualityAssessRequest {
+  input: QualityAssessmentInput;
+}
+
+export interface QualityAssessResponse {
+  assessment: QualityAssessment;
+}
+
+export interface OsrsApiQuality {
+  assessQuality(request: QualityAssessRequest): Promise<QualityAssessResponse>;
+}
+
 export interface OsrsApi {
   app: OsrsApiApp;
   /**
@@ -244,4 +274,11 @@ export interface OsrsApi {
    * (S7/S8/S10/S11/S12 precedent).
    */
   flips?: OsrsApiFlips;
+  /**
+   * Sprint 16 slice-2 data-quality surface. Optional so a stale preload
+   * predating slice-2 still typechecks; the renderer keeps a runtime
+   * `typeof !== 'function'` guard and falls back to the pure
+   * assessDataQuality (S7/S8/S10/S11/S12/S13 precedent).
+   */
+  quality?: OsrsApiQuality;
 }

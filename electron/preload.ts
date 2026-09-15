@@ -6,6 +6,7 @@ import {
   ALERTS_SET_ENABLED,
   APP_GET_VERSION,
   FLIP_CALCULATE,
+  QUALITY_ASSESS,
   MARKET_GET_HISTORY,
   MARKET_GET_TOP10,
   MARKET_REFRESH_NOW,
@@ -24,6 +25,8 @@ import type {
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
+  QualityAssessRequest,
+  QualityAssessResponse,
   MarketTop10Request,
   MarketTop10Response,
   OsrsApi,
@@ -81,6 +84,12 @@ const api: OsrsApi = {
   flips: {
     calculateFlip: (request: FlipCalculateRequest) =>
       ipcRenderer.invoke(FLIP_CALCULATE, request) as Promise<FlipCalculateResponse>,
+  },
+  // Sprint 16 slice-2: stateless quality assessment (pure assessDataQuality
+  // main-side; callers pass the observed batch in, trust verdict comes out).
+  quality: {
+    assessQuality: (request: QualityAssessRequest) =>
+      ipcRenderer.invoke(QUALITY_ASSESS, request) as Promise<QualityAssessResponse>,
   },
 };
 

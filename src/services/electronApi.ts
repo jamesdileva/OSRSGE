@@ -11,6 +11,8 @@ import type {
   MarketTop10Request,
   MarketTop10Response,
   OsrsApi,
+  QualityAssessRequest,
+  QualityAssessResponse,
   WatchlistAddRequest,
   WatchlistGetResponse,
   WatchlistRemoveRequest,
@@ -174,4 +176,18 @@ export async function calculateFlipRequest(request: FlipCalculateRequest): Promi
     throw new Error('Desktop bridge unavailable');
   }
   return api.flips.calculateFlip(request);
+}
+
+/**
+ * Sprint 16 slice-2 quality assessment via the preload bridge.
+ * Throws when the bridge is absent or the preload predates the quality
+ * surface so callers can fall back to the pure assessDataQuality
+ * (S7/S8/S10/S11/S12/S13 stale-preload precedent).
+ */
+export async function assessQualityRequest(request: QualityAssessRequest): Promise<QualityAssessResponse> {
+  const api = getDesktopApi();
+  if (api?.quality == null || typeof api.quality.assessQuality !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.quality.assessQuality(request);
 }
