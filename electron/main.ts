@@ -13,15 +13,22 @@ import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
 import { getAppLogger, initAppLogger } from './services/appLogger.js';
+import { createPipelineRefresh } from './services/refreshPipeline.js';
 import { createLoggingRefresh, startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
 import { JsonWatchlistRepository } from '../storage/json/JsonWatchlistRepository.js';
 import { JsonAlertRepository } from '../storage/json/JsonAlertRepository.js';
+import { WikiPriceProvider } from '../core/market/providers/WikiPriceProvider.js';
+import { closeHistoryRepository, createHistoryRepository } from '../storage/historyBackend.js';
+import type { HistoryRepository } from '../core/history/HistoryRepository.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 
 let mainWindow: BrowserWindow | null = null;
+// S20 slice-1: module-level history handle so before-quit can release the
+// backend (no-op for JSON, closes SQLite). Assigned once at launch.
+let historyRepository: HistoryRepository | null = null;
 
 function createWindow(): BrowserWindow {
   const preloadPath = path.join(currentDir, 'preload.js');
@@ -41,7 +48,7 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
   initializeApplicationServices();
   // Sprint 19 slice-2: main-owned app logger (file sink under userData,
   // guide §44; no history-backend touch). Startup is the first category.
@@ -77,18 +84,36 @@ void app.whenReady().then(() => {
   // lazy supplier so a swapped instance never leaves a stale capture).
   registerLogsHandlers(ipcMain, { getLogger: () => getAppLogger() });
   createWindow();
-  // Sprint 10 slice-2: timer runtime on stub-only refresh (D#163 — the
-  // refresh advances schedule state; no live pipeline yet). Notify pushes
-  // the fresh schedule snapshot to the renderer; the manual trigger runs
-  // one refresh now (single-flight shared with timer ticks).
-  // S19 slice-3a: the stub refresh runs through the retained app logger so
+  // Sprint 10 slice-2: timer runtime (D#163) — S20 slice-1 plugs the real
+  // provider → normalize → history pipeline in as the `refresh` dep
+  // (SnapshotService verbatim, history selector verbatim, no interface
+  // change). Notify pushes the fresh schedule snapshot to the renderer;
+  // the manual trigger runs one refresh now (single-flight shared with
+  // timer ticks).
+  // S19 slice-3a: the refresh runs through the retained app logger so
   // every scheduler success/failure lands in the memory ring + app.log
-  // (guide §44 `scheduler`; cheapest pipeline-caller disconfirm, no UI).
-  // Slice-3b: lazy supplier (review #195 nit 2) + explicit stub message
-  // inside createLoggingRefresh (nit 1) so the log never claims a real
-  // refresh while the pipeline is still a stub.
+  // (guide §44 `scheduler`). S20 slice-1: the inner pipeline logs
+  // `api-refresh`/`api-failure` with real snapshot/excluded counts, so the
+  // ring answers "why didn't the rankings update?" with evidence — the
+  // `(stub, no pipeline)` honesty note is retired for the scheduler path
+  // (Top-10/history IPC fixtures stay stub until the scorer slice).
+  // Slice-3b: lazy supplier (review #195 nit 2) so a swapped instance never
+  // leaves a stale capture.
+  const { repository, backend: historyBackend } =
+    await createHistoryRepository(app.getPath('userData'));
+  historyRepository = repository;
+  void getAppLogger()
+    ?.log('info', 'startup', `history backend: ${historyBackend}`)
+    ?.catch(() => undefined);
   const scheduler = startScheduler(undefined, {
-    refresh: createLoggingRefresh(() => getAppLogger()),
+    refresh: createLoggingRefresh(
+      () => getAppLogger(),
+      createPipelineRefresh({
+        provider: new WikiPriceProvider(),
+        repository: historyRepository,
+        logger: () => getAppLogger(),
+      }),
+    ),
     notify: (update: MarketRefreshUpdate) => {
       mainWindow?.webContents.send(MARKET_REFRESH_UPDATED, update);
     },
@@ -115,7 +140,17 @@ app.on('window-all-closed', () => {
 
 // Review #96 nit 3: stop the scheduler timer explicitly on quit — harmless
 // today (process exit kills the handle) but cheaper than debugging a
-// lingering handle in tests/packaged runs.
+// lingering handle in tests/packaged runs. S20 slice-1: also release the
+// history backend handle (no-op for JSON, closes SQLite).
 app.on('before-quit', () => {
   stopScheduler();
+  if (historyRepository !== null) {
+    try {
+      closeHistoryRepository(historyRepository);
+    } catch {
+      // Backend release must not block shutdown; the failure is already
+      // visible via the refresh log if it matters.
+    }
+    historyRepository = null;
+  }
 });
