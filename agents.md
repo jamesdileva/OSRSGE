@@ -4,6 +4,54 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 18 — SQLite history backend, MIGRATE verdict answered (2026-09-15)
+
+**Goal:** answer the Sprint 17 MIGRATE verdict (roadmap §19): SQLite
+`HistoryRepository` behind the verbatim interface so analytics never
+notices the swap. JSON stays the always-available fallback; no
+interface/schema change beyond the new backend.
+
+**Did:**
+- Slice-1 (`b4dce6e`) — `storage/sqlite/SqliteHistoryRepository.ts`
+  (new): `node:sqlite` stdlib only (host node v24.14.1, Electron 44
+  node v24.19 — same major, zero new deps, `better-sqlite3`
+  deliberately NOT added). One `snapshots` + one `batches` table, WAL
+  mode, single-writer discipline (one instance per process, `close()`
+  releases the handle). Parity with `JsonHistoryRepository` — empty
+  batch no-op, timestamp-exists dedupe skip, 7-day prune on save,
+  oldest-first `getItemHistory`, newest-row `getLatestSnapshot`.
+  Intentional divergence: corrupt DB throws fail-closed (SQLite cannot
+  skip a corrupt page the way JSON skips a corrupt file).
+  `storage/paths.ts`: `historyDbFile(baseDir)`. No wiring in this
+  slice (JSON default, module never imported by main yet).
+- Slice-2 (`f05c017`) — `storage/historyBackend.ts` (new):
+  `createHistoryRepository` selector so live entry points never branch
+  on the backend themselves. Dynamic-`import()` SQLite load gate:
+  missing `node:sqlite` or a corrupt-DB constructor throw falls back
+  to JSON (same interface, tolerant reads). `closeHistoryRepository`
+  helper (no-op for JSON). `scripts/check-market.ts` wired through
+  the selector + `History backend: <sqlite|json>` log. Main not
+  instantiated yet (no live consumer — avoids a dead handle).
+- Tests: `tests/storage/sqliteHistoryRepository.test.ts` (10:
+  round-trip + range, newest-wins, empty no-op, dedupe skip, prune,
+  NULL-optional round-trip, JSON parity on same batches, composite
+  index exists, corrupt throws, use-after-close refused) +
+  `tests/storage/historyBackend.test.ts` (4: sqlite-when-resolves,
+  fallback on missing module, fallback on corrupt construction, close
+  helper) — 327 total (313 → 323 → 327).
+
+**Decisions:**
+- One driver max: `node:sqlite` stdlib, no native dep.
+- Fail-closed corrupt DB (surfacing beats silently serving partial
+  history); fail-open backend selection (JSON fallback keeps the app
+  alive wherever SQLite is missing).
+- Repository interfaces untouched — analytics never notices the swap.
+
+**Verified:**
+- `npm test` → 54 files, 327/327 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Awaiting agent-b review of `f05c017`.
+
 ## Sprint 17 (bench) — Storage-bottleneck measurement, MIGRATE verdict (2026-09-15)
 
 **Goal:** cheapest disconfirm for roadmap §19 (review #178): measure the
