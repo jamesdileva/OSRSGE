@@ -20,6 +20,8 @@
  * All helpers never mutate their inputs (frozen-input safe).
  */
 
+import type { AppLogger } from './appLogger.js';
+
 /** Roadmap §12 UI example default: refresh every 5 minutes. */
 export const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -282,4 +284,41 @@ export function startScheduler(config?: SchedulerConfig, deps?: SchedulerRuntime
 export function stopScheduler(): void {
   activeHandle?.stop();
   activeHandle = null;
+}
+
+/**
+ * Sprint 19 slice-3a: scheduler → app-logger bridge (guide §44 `scheduler`).
+ * Wraps a refresh handler so success logs `info/scheduler` and failure logs
+ * `error/scheduler` (with the failure message) into the retained main-owned
+ * logger, then rethrows so the backoff stamps the streak as before. A null
+ * logger is a pass-through; logger bugs never mask the inner outcome (a
+ * throwing log on the success path is swallowed, on the failure path the
+ * original error is rethrown). Cheapest S19 disconfirm: one pipeline caller
+ * through the retained logger before any IPC/UI.
+ */
+export function createLoggingRefresh(
+  logger: Pick<AppLogger, 'log'> | null | undefined,
+  inner?: SchedulerRefreshHandler,
+): SchedulerRefreshHandler {
+  return async (): Promise<void> => {
+    try {
+      await inner?.();
+    } catch (error) {
+      try {
+        await logger?.log(
+          'error',
+          'scheduler',
+          `refresh failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      } catch {
+        // Logging must not mask the refresh failure it observes.
+      }
+      throw error;
+    }
+    try {
+      await logger?.log('info', 'scheduler', 'refresh succeeded');
+    } catch {
+      // A logging bug must not turn a successful refresh into a failure.
+    }
+  };
 }

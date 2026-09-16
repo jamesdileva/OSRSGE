@@ -104,3 +104,34 @@ export function createAppLogger(options: AppLoggerOptions = {}): AppLogger {
     },
   };
 }
+
+/**
+ * Sprint 19 slice-3a: module-level retention (review #193 carried nit).
+ * main.ts retains the logger via `initAppLogger` at launch so pipeline
+ * callers (scheduler refresh, future storage/API stages) log into the
+ * same memory ring + file sink instead of a callback-local instance that
+ * is discarded after startup. Tests reset via `resetAppLogger` / `setAppLogger`.
+ */
+let activeLogger: AppLogger | null = null;
+
+/** Retained main-owned logger, or null before init / in renderer tests. */
+export function getAppLogger(): AppLogger | null {
+  return activeLogger;
+}
+
+/** Explicit override (tests, main restart). Pass null to clear. */
+export function setAppLogger(logger: AppLogger | null): void {
+  activeLogger = logger;
+}
+
+/** Create + retain in one step (main launch path). */
+export function initAppLogger(options: AppLoggerOptions = {}): AppLogger {
+  const logger = createAppLogger(options);
+  activeLogger = logger;
+  return logger;
+}
+
+/** Clear the retained instance (tests only; main never calls this). */
+export function resetAppLogger(): void {
+  activeLogger = null;
+}

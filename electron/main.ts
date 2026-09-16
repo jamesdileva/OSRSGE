@@ -11,8 +11,8 @@ import { registerQualityHandlers } from './ipc/quality.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
-import { createAppLogger } from './services/appLogger.js';
-import { startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
+import { getAppLogger, initAppLogger } from './services/appLogger.js';
+import { createLoggingRefresh, startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
 import { JsonWatchlistRepository } from '../storage/json/JsonWatchlistRepository.js';
 import { JsonAlertRepository } from '../storage/json/JsonAlertRepository.js';
@@ -44,8 +44,10 @@ void app.whenReady().then(() => {
   initializeApplicationServices();
   // Sprint 19 slice-2: main-owned app logger (file sink under userData,
   // guide §44; no history-backend touch). Startup is the first category.
-  const appLogger = createAppLogger({ baseDir: app.getPath('userData') });
-  void appLogger.log('info', 'startup', `app started v${getApplicationVersion()}`);
+  // Slice-3a: retained module-level (review #193 nit) so scheduler/pipeline
+  // callers log into the same ring past launch.
+  initAppLogger({ baseDir: app.getPath('userData') });
+  void getAppLogger()?.log('info', 'startup', `app started v${getApplicationVersion()}`);
   registerAppHandlers(ipcMain, { getVersion: getApplicationVersion });
   registerMarketHandlers(ipcMain, { getTop10: (request) => getStubTop10Response(request), getHistory: (request) => getStubHistoryResponse(request) });
   // Sprint 11 slice-2: watchlist persistence owned by main (ID-only store,
@@ -73,7 +75,11 @@ void app.whenReady().then(() => {
   // refresh advances schedule state; no live pipeline yet). Notify pushes
   // the fresh schedule snapshot to the renderer; the manual trigger runs
   // one refresh now (single-flight shared with timer ticks).
+  // S19 slice-3a: the stub refresh runs through the retained app logger so
+  // every scheduler success/failure lands in the memory ring + app.log
+  // (guide §44 `scheduler`; cheapest pipeline-caller disconfirm, no UI).
   const scheduler = startScheduler(undefined, {
+    refresh: createLoggingRefresh(getAppLogger()),
     notify: (update: MarketRefreshUpdate) => {
       mainWindow?.webContents.send(MARKET_REFRESH_UPDATED, update);
     },
