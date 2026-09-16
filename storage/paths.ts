@@ -38,3 +38,13 @@ export function watchlistFile(baseDir: string): string {
 export function alertsFile(baseDir: string): string {
   return path.join(baseDir, 'alerts.json');
 }
+
+/** Log directory (S19 slice-2, guide §16 `logs/`). */
+export function logDir(baseDir: string): string {
+  return path.join(baseDir, 'logs');
+}
+
+/** Append-only application log file (S19 slice-2, guide §44). */
+export function appLogFile(baseDir: string): string {
+  return path.join(logDir(baseDir), 'app.log');
+}

@@ -11,6 +11,7 @@ import { registerQualityHandlers } from './ipc/quality.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { getStubHistoryResponse, getStubTop10Response } from './ipc/marketStub.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
+import { createAppLogger } from './services/appLogger.js';
 import { startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
 import { JsonWatchlistRepository } from '../storage/json/JsonWatchlistRepository.js';
@@ -41,6 +42,10 @@ function createWindow(): BrowserWindow {
 
 void app.whenReady().then(() => {
   initializeApplicationServices();
+  // Sprint 19 slice-2: main-owned app logger (file sink under userData,
+  // guide §44; no history-backend touch). Startup is the first category.
+  const appLogger = createAppLogger({ baseDir: app.getPath('userData') });
+  void appLogger.log('info', 'startup', `app started v${getApplicationVersion()}`);
   registerAppHandlers(ipcMain, { getVersion: getApplicationVersion });
   registerMarketHandlers(ipcMain, { getTop10: (request) => getStubTop10Response(request), getHistory: (request) => getStubHistoryResponse(request) });
   // Sprint 11 slice-2: watchlist persistence owned by main (ID-only store,
