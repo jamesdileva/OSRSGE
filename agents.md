@@ -4,6 +4,67 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 19 (slices 1–2) — Application logging: pure core + file sink + main-owned logger (2026-09-16)
+
+**Goal:** guide §44 logging so "Why didn't the rankings update?" is
+answerable from one place: startup, API refresh, API failures, snapshot
+count, ranking count, storage failures, scheduler events. No
+history-backend touch, no IPC/UI yet (later slice), no diagnosis engine.
+
+**Did:**
+- Slice-1 (`303326d`) — `core/diagnostics/appLog.ts` (new, pure):
+  `LogLevel`/`LogCategory` covering the seven guide §44 categories 1:1,
+  `MAX_LOG_ENTRIES` (500, newest-wins ring) + `MAX_MESSAGE_CHARS` (500) +
+  `MAX_DETAILS_CHARS` (2000) budgets, `createLogEvent`/`appendLogEvent`/
+  `summarizeLog` (counts by level/category + last error + last event) +
+  `formatLogEvent` single-line truth. Explicit `timestampMs`, frozen-input
+  safe, fresh outputs. No fs/Electron/IPC/scheduler/UI/network/Date.now.
+- Slice-2 (`17458fe`) — `storage/log/FileAppLogSink.ts` (new):
+  append-only `<baseDir>/logs/app.log`, one `formatLogEvent` line per
+  event, fail-closed BEFORE any fs touch (invalid events throw before
+  mkdir), 512 KiB rotation to `app.log.1` (2 generations max — recent
+  failure answer, not audit trail), single-writer discipline (main only,
+  S18 SQLite precedent). `storage/paths.ts`: `logDir`/`appLogFile`.
+  `electron/services/appLogger.ts` (new): main-owned ring + sink with
+  `now` dep (S10/S11 precedent); sink failures become memory-only
+  `storage` error events, never re-sent (no recursion, never throws —
+  logging must not crash the pipeline it observes). `electron/main.ts`:
+  startup `app started v…` log wired at launch.
+- Tests: `tests/diagnostics/appLog.test.ts` +
+  `tests/diagnostics/fileAppLogSink.test.ts` +
+  `tests/diagnostics/appLogger.test.ts` + `paths` additions — 349 total
+  (327 → 349).
+
+**Decisions:**
+- Formatting truth lives in the pure core; the sink calls
+  `formatLogEvent` and never formats itself.
+- Two log generations max by design; summaries come from the memory
+  buffer, never by parsing the file.
+- Sink failures stay memory-only (memory truth preserved); the failure
+  event itself is a guide §44 `storage` category.
+- No IPC/UI in these slices — renderer exposure waits for a later slice;
+  no history-backend touch (no repository/selector imports anywhere).
+
+**Verified:**
+- `npm test` → 57 files, 349/349 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Review #193 CLEAR on `17458fe` (mail #194, agent-b independently
+  re-verified 349/349 + typecheck + build, pure core untouched,
+  no history-backend touch, scope honored).
+
+**Carried nits (non-gating, review #193):**
+- Logger instance is callback-local so the memory buffer is discarded
+  after startup — slice-3 should retain module-level access when
+  pipeline callers arrive.
+- `void` floating log promise could unhandled-reject on invalid clock
+  (trivial with valid literals).
+- Concurrent `log()` stat-then-append can overshoot the cap (acceptable
+  under documented single-writer); first-line-larger-than-cap writes
+  oversized without rotation (trivial at 512 KiB vs ~100 B lines).
+- Slice-1 nits still open (unfrozen `LOG_*` consts, unbounded in-memory
+  details until format) + S18 slice-1 nits + split-brain/Electron-proof
+  gates.
+
 ## Sprint 18 — SQLite history backend, MIGRATE verdict answered (2026-09-15)
 
 **Goal:** answer the Sprint 17 MIGRATE verdict (roadmap §19): SQLite

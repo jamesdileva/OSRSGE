@@ -1,17 +1,21 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: Sprint 17 bench DONE — full-week JSON measurement says
-MIGRATE (7d 1.033 GiB > 1 GiB, history p95 9458.9ms > 1000ms, latest
-p95 4.1ms passes). Tests 313/313 + typecheck + build green. Next:
-SQLite migration behind untouched repository interfaces (board #30
-closing); S15 auto-search still out; S16 full-batch quality context
-unwired; watch no-profit rho 0.9819, staleness Infinity,
-frozenFeed/health/labels, bridgeStatus race, alert-id collision.
-Key learnings: quality non-overlap — ≤0/non-finite stays normalizer
-exclusion (quality strict-throws it as caller bug), timestamp-dedupe
-persistence stays repository (quality owns pure timestamp-exists predicate,
-content-equal + new timestamp = frozen-feed not duplicate),
-freshnessFactor stays ranking weight (quality freshnessScore is trust-display
-truth with isStale derived); invalid throws / impossible skip-counts /
-suspicious flags-but-keeps (guide §45).
+Current goal: Sprint 19 slices 1–2 DONE + review-CLEAR (mail #194).
+Pure app-log core (303326d: 7 guide-§44 categories, 500-entry ring,
+format truth) + file sink + main-owned logger (17458fe:
+<baseDir>/logs/app.log, 512 KiB rotation to app.log.1, sink failures
+memory-only, startup log wired). Tests 349/349 + typecheck + build +
+build:electron green. agents.md S19 worklog landed this cycle.
+Next: S19 slice-3 — retain module-level logger access for pipeline
+callers and/or renderer log exposure (IPC); review #193 nit drives it.
+No history-backend touch; no IPC/UI yet; no diagnosis engine.
+Key learnings: formatting truth in pure core, sink never formats;
+2 generations max (recent-failure answer, not audit); summaries from
+memory buffer, never file parse; logging never throws into pipeline;
+quality non-overlap — ≤0/non-finite stays normalizer exclusion,
+timestamp-dedupe stays repository (content-equal + new ts =
+frozen-feed), freshnessFactor stays ranking weight; invalid throws /
+impossible skip-counts / suspicious flags-but-keeps (guide §45).
+Watch: no-profit rho 0.9819, staleness Infinity, bridgeStatus race,
+alert-id collision, S18 slice-1 + split-brain/Electron-proof gates.
 Rule: one committable segment per cycle; npm test + typecheck + build green before merge.
