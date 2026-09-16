@@ -4,6 +4,68 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 19 (slice 3) — Retained logger + scheduler logging + read-only log IPC (2026-09-16)
+
+**Goal:** close the review #193 carried nit (callback-local logger
+discarded after startup) and expose the main-owned memory ring
+read-only to the renderer. Still no history-backend touch, no UI
+viewer, no diagnosis engine.
+
+**Did:**
+- Slice-3a (`4d91eef`) — `electron/services/appLogger.ts`:
+  `getAppLogger`/`setAppLogger`/`initAppLogger`/`resetAppLogger`
+  module-level retention so pipeline callers log into the same ring +
+  file sink past launch. `electron/services/scheduler.ts`:
+  `createLoggingRefresh` bridge — success logs `info/scheduler`,
+  failure logs `error/scheduler` + rethrows (backoff unchanged); null
+  logger pass-through; throwing log never masks the refresh outcome.
+  `electron/main.ts`: `initAppLogger` at launch, stub refresh runs
+  through the bridge (cheapest pipeline-caller disconfirm, no UI).
+- Slice-3b (`2514c93`) — `shared/ipc.ts`: `LOG_GET_RECENT` /
+  `LOG_GET_SUMMARY` + `LogRecentRequest/Response`/`LogSummaryResponse`
+  reusing pure `AppLogEvent`/`LogSummary` verbatim; `OsrsApi.logs`
+  optional (stale-preload precedent). `electron/ipc/logs.handlers.ts`
+  (new): read-only recent (newest-N slice, invalid limit fail-closed)
+  + summary from the memory ring, never file parsing; null logger
+  returns empty reads, never throws; lazy `getLogger` supplier so a
+  swapped instance never leaves a stale capture. `preload.ts` +
+  `electronApi.fetchLogRecent/fetchLogSummary` with bridge-absent/stale
+  `typeof` guards throwing `Desktop bridge unavailable`. Main wires
+  `registerLogsHandlers` with `() => getAppLogger()`.
+- Review #195 nits closed in 3b: stub success reads
+  `refresh succeeded (stub, no pipeline)` vs real `refresh succeeded`
+  with inner; lazy supplier in both main registration and
+  `createLoggingRefresh` (throwing supplier degrades to null,
+  per-request resolution); startup log carries `.catch` (no unhandled
+  rejection).
+- Tests: `tests/diagnostics/schedulerLogging.test.ts` (new, 3a) +
+  `tests/ipc/logs.test.ts` (new, 3b) — 365 total (349 → 365).
+
+**Decisions:**
+- Retention is main-owned and module-level (S18 single-writer
+  precedent); tests reset via `resetAppLogger`/`setAppLogger`, main
+  never clears.
+- Read-only IPC by design: no writes/clearing/diagnosis; renderer log
+  viewer stays a future slice.
+- Stub honesty: the success message names the stub while no real
+  pipeline exists, so the log answers "why didn't the rankings
+  update?" without masquerading.
+- Summaries come from the memory buffer, never by parsing `app.log`.
+
+**Verified:**
+- `npm test` → 59 files, 365/365 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Review #199 CLEAR on `2514c93` (agent-b independently re-verified
+  365/365 + typecheck + build, pure core untouched, scope honored).
+
+**Carried nits (non-gating, review #199):**
+- String limit `"5"` throws `Invalid log limit` rather than coercing
+  (fail-closed, consistent with slice-1 strictness).
+- `getSummary` handler ignores stray request args (correct, no params).
+- Renderer log-viewer UI still deferred (read path only, as scoped).
+- Slice-1/2 nits still open + S18 slice-1 nits + split-brain/
+  Electron-proof gates.
+
 ## Sprint 19 (slices 1–2) — Application logging: pure core + file sink + main-owned logger (2026-09-16)
 
 **Goal:** guide §44 logging so "Why didn't the rankings update?" is
