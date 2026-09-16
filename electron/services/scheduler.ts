@@ -295,17 +295,48 @@ export function stopScheduler(): void {
  * throwing log on the success path is swallowed, on the failure path the
  * original error is rethrown). Cheapest S19 disconfirm: one pipeline caller
  * through the retained logger before any IPC/UI.
+ *
+ * Slice-3b (review #195 nits):
+ * - `logger` also accepts a lazy supplier `() => logger` so main passes
+ *   `() => getAppLogger()` and a later instance swap (tests, main restart)
+ *   never leaves the scheduler holding a stale capture. Suppliers are
+ *   resolved per refresh; a throwing supplier degrades to null (pass-through
+ *   for that tick, never a masked outcome).
+ * - Stub semantics are explicit: with no inner pipeline the success message
+ *   reads `refresh succeeded (stub, no pipeline)` so the log answers "why
+ *   didn't the rankings update?" honestly — success-without-evidence no
+ *   longer masquerades as a real refresh.
  */
+export type LoggingRefreshLogger =
+  | Pick<AppLogger, 'log'>
+  | null
+  | undefined
+  | (() => Pick<AppLogger, 'log'> | null | undefined);
+
+function resolveLoggingLogger(logger: LoggingRefreshLogger): Pick<AppLogger, 'log'> | null {
+  if (typeof logger === 'function') {
+    try {
+      return logger() ?? null;
+    } catch {
+      return null;
+    }
+  }
+  return logger ?? null;
+}
+
 export function createLoggingRefresh(
-  logger: Pick<AppLogger, 'log'> | null | undefined,
+  logger: LoggingRefreshLogger,
   inner?: SchedulerRefreshHandler,
 ): SchedulerRefreshHandler {
+  const successMessage =
+    inner === undefined ? 'refresh succeeded (stub, no pipeline)' : 'refresh succeeded';
   return async (): Promise<void> => {
+    const resolved = resolveLoggingLogger(logger);
     try {
       await inner?.();
     } catch (error) {
       try {
-        await logger?.log(
+        await resolved?.log(
           'error',
           'scheduler',
           `refresh failed: ${error instanceof Error ? error.message : String(error)}`,
@@ -316,7 +347,7 @@ export function createLoggingRefresh(
       throw error;
     }
     try {
-      await logger?.log('info', 'scheduler', 'refresh succeeded');
+      await resolved?.log('info', 'scheduler', successMessage);
     } catch {
       // A logging bug must not turn a successful refresh into a failure.
     }

@@ -10,6 +10,7 @@ import type { WatchlistEntry } from '../core/watchlist/watchlist.js';
 import type { AlertRule, AlertRuleDraft } from '../core/alerts/alertRules.js';
 import type { FlipInput, FlipResult } from '../core/market/flips/flipCalculator.js';
 import type { QualityAssessment, QualityAssessmentInput } from '../core/market/quality/qualityAssessment.js';
+import type { AppLogEvent, LogSummary } from '../core/diagnostics/appLog.js';
 
 /** Sprint 1 smoke channel: proves the preload bridge round-trips. */
 export const APP_GET_VERSION = 'app:getVersion';
@@ -70,6 +71,17 @@ export const FLIP_CALCULATE = 'flip:calculate';
  * fail-closed.
  */
 export const QUALITY_ASSESS = 'quality:assess';
+
+/**
+ * Sprint 19 slice-3b: read-only app-log exposure (guide §44).
+ * Renderer reads the main-owned memory ring — no writes, no clearing,
+ * no diagnosis. Two channels so callers fetch only what they need:
+ * recent events for the "why didn't rankings update?" detail view,
+ * summary for counts + last error. Payloads reuse the pure
+ * AppLogEvent/LogSummary shapes verbatim (never reformatted).
+ */
+export const LOG_GET_RECENT = 'logs:getRecent';
+export const LOG_GET_SUMMARY = 'logs:getSummary';
 
 /** Minimal app bridge exposed to the renderer. Grows in later sprints (market, settings, history). */
 export interface OsrsApiApp {
@@ -246,6 +258,29 @@ export interface OsrsApiQuality {
   assessQuality(request: QualityAssessRequest): Promise<QualityAssessResponse>;
 }
 
+/**
+ * Sprint 19 slice-3b log-read contract. `limit` caps to the newest N
+ * events in stored (oldest-first) order; absent means the full ring.
+ * Invalid limits throw fail-closed via the handler (never silently
+ * clamped). Responses are verbatim pure-core shapes.
+ */
+export interface LogRecentRequest {
+  limit?: number;
+}
+
+export interface LogRecentResponse {
+  events: AppLogEvent[];
+}
+
+export interface LogSummaryResponse {
+  summary: LogSummary;
+}
+
+export interface OsrsApiLogs {
+  getRecent(request?: LogRecentRequest): Promise<LogRecentResponse>;
+  getSummary(): Promise<LogSummaryResponse>;
+}
+
 export interface OsrsApi {
   app: OsrsApiApp;
   /**
@@ -281,4 +316,11 @@ export interface OsrsApi {
    * assessDataQuality (S7/S8/S10/S11/S12/S13 precedent).
    */
   quality?: OsrsApiQuality;
+  /**
+   * Sprint 19 slice-3b log-read surface. Optional so a stale preload
+   * predating slice-3b still typechecks; the renderer keeps a runtime
+   * `typeof !== 'function'` guard and falls back to a log-unavailable
+   * notice (S7/S8/S10/S11/S12/S13/S16 precedent).
+   */
+  logs?: OsrsApiLogs;
 }

@@ -5,6 +5,9 @@ import type {
   AlertsSetEnabledRequest,
   FlipCalculateRequest,
   FlipCalculateResponse,
+  LogRecentRequest,
+  LogRecentResponse,
+  LogSummaryResponse,
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
@@ -190,4 +193,27 @@ export async function assessQualityRequest(request: QualityAssessRequest): Promi
     throw new Error('Desktop bridge unavailable');
   }
   return api.quality.assessQuality(request);
+}
+
+/**
+ * Sprint 19 slice-3b log reads via the preload bridge.
+ * Throws when the bridge is absent or the preload predates the logs
+ * surface so callers fall back to a log-unavailable notice
+ * (S7/S8/S10/S11/S12/S13/S16 stale-preload precedent). Read-only:
+ * no writes, no clearing — the memory ring stays main-owned.
+ */
+export async function fetchLogRecent(request?: LogRecentRequest): Promise<LogRecentResponse> {
+  const api = getDesktopApi();
+  if (api?.logs == null || typeof api.logs.getRecent !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.logs.getRecent(request);
+}
+
+export async function fetchLogSummary(): Promise<LogSummaryResponse> {
+  const api = getDesktopApi();
+  if (api?.logs == null || typeof api.logs.getSummary !== 'function') {
+    throw new Error('Desktop bridge unavailable');
+  }
+  return api.logs.getSummary();
 }

@@ -95,9 +95,11 @@ describe('S19 slice-3a retained logger + scheduler refresh logging (offline)', (
     const logger = initAppLogger({ baseDir: dir, now: stubNow() });
     await logger.log('info', 'startup', 'boot');
     await createLoggingRefresh(logger)();
-    expect(logger.getRecent().map((e) => e.message)).toEqual(['boot', 'refresh succeeded']);
+    // Slice-3b: stub refresh (no inner pipeline) says so explicitly
+    // (review #195 nit 1) — success-without-evidence must not read as real.
+    expect(logger.getRecent().map((e) => e.message)).toEqual(['boot', 'refresh succeeded (stub, no pipeline)']);
     const text = await readFile(appLogFile(dir), 'utf8');
     expect(text).toContain('INFO startup: boot');
-    expect(text).toContain('INFO scheduler: refresh succeeded');
+    expect(text).toContain('INFO scheduler: refresh succeeded (stub, no pipeline)');
   });
 });

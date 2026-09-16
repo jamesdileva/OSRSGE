@@ -7,6 +7,8 @@ import {
   APP_GET_VERSION,
   FLIP_CALCULATE,
   QUALITY_ASSESS,
+  LOG_GET_RECENT,
+  LOG_GET_SUMMARY,
   MARKET_GET_HISTORY,
   MARKET_GET_TOP10,
   MARKET_REFRESH_NOW,
@@ -22,6 +24,9 @@ import type {
   AlertsSetEnabledRequest,
   FlipCalculateRequest,
   FlipCalculateResponse,
+  LogRecentRequest,
+  LogRecentResponse,
+  LogSummaryResponse,
   MarketHistoryRequest,
   MarketHistoryResponse,
   MarketRefreshUpdate,
@@ -90,6 +95,13 @@ const api: OsrsApi = {
   quality: {
     assessQuality: (request: QualityAssessRequest) =>
       ipcRenderer.invoke(QUALITY_ASSESS, request) as Promise<QualityAssessResponse>,
+  },
+  // Sprint 19 slice-3b: read-only app-log exposure (memory ring only;
+  // no writes, no clearing, no diagnosis — guide §44 read path).
+  logs: {
+    getRecent: (request?: LogRecentRequest) =>
+      ipcRenderer.invoke(LOG_GET_RECENT, request) as Promise<LogRecentResponse>,
+    getSummary: () => ipcRenderer.invoke(LOG_GET_SUMMARY) as Promise<LogSummaryResponse>,
   },
 };
 

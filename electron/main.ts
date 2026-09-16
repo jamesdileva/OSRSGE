@@ -6,6 +6,7 @@ import type { MarketRefreshUpdate } from '../shared/ipc.js';
 import { registerAppHandlers } from './ipc/app.handlers.js';
 import { registerAlertsHandlers } from './ipc/alerts.handlers.js';
 import { registerFlipsHandlers } from './ipc/flips.handlers.js';
+import { registerLogsHandlers } from './ipc/logs.handlers.js';
 import { registerMarketHandlers } from './ipc/market.handlers.js';
 import { registerQualityHandlers } from './ipc/quality.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
@@ -47,7 +48,9 @@ void app.whenReady().then(() => {
   // Slice-3a: retained module-level (review #193 nit) so scheduler/pipeline
   // callers log into the same ring past launch.
   initAppLogger({ baseDir: app.getPath('userData') });
-  void getAppLogger()?.log('info', 'startup', `app started v${getApplicationVersion()}`);
+  // Slice-3b: attach .catch so a logging bug can never surface as an
+  // unhandled rejection from the startup path (review #195 nit 3).
+  void getAppLogger()?.log('info', 'startup', `app started v${getApplicationVersion()}`)?.catch(() => undefined);
   registerAppHandlers(ipcMain, { getVersion: getApplicationVersion });
   registerMarketHandlers(ipcMain, { getTop10: (request) => getStubTop10Response(request), getHistory: (request) => getStubHistoryResponse(request) });
   // Sprint 11 slice-2: watchlist persistence owned by main (ID-only store,
@@ -70,6 +73,9 @@ void app.whenReady().then(() => {
   // Sprint 16 slice-2: stateless quality assessment (pure assessDataQuality
   // default; no repository — nothing persists, callers pass the batch in).
   registerQualityHandlers(ipcMain);
+  // Sprint 19 slice-3b: read-only log exposure (memory ring + summary;
+  // lazy supplier so a swapped instance never leaves a stale capture).
+  registerLogsHandlers(ipcMain, { getLogger: () => getAppLogger() });
   createWindow();
   // Sprint 10 slice-2: timer runtime on stub-only refresh (D#163 — the
   // refresh advances schedule state; no live pipeline yet). Notify pushes
@@ -78,8 +84,11 @@ void app.whenReady().then(() => {
   // S19 slice-3a: the stub refresh runs through the retained app logger so
   // every scheduler success/failure lands in the memory ring + app.log
   // (guide §44 `scheduler`; cheapest pipeline-caller disconfirm, no UI).
+  // Slice-3b: lazy supplier (review #195 nit 2) + explicit stub message
+  // inside createLoggingRefresh (nit 1) so the log never claims a real
+  // refresh while the pipeline is still a stub.
   const scheduler = startScheduler(undefined, {
-    refresh: createLoggingRefresh(getAppLogger()),
+    refresh: createLoggingRefresh(() => getAppLogger()),
     notify: (update: MarketRefreshUpdate) => {
       mainWindow?.webContents.send(MARKET_REFRESH_UPDATED, update);
     },
