@@ -4,6 +4,63 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 20 (slice 1) — Live pipeline refresh through the retained logger (2026-09-16)
+
+**Goal:** replace the honest `(stub, no pipeline)` refresh with the real
+fetch → normalize → persist path, observed by the S19 retained logger, so
+the ring answers "why didn't the rankings update?" with evidence. Still
+no scorer/ranking counts, no Top-10/history IPC change, no log-viewer UI.
+
+**Did:**
+- `electron/services/refreshPipeline.ts` (new): `createPipelineRefresh`
+  — one refresh = `SnapshotService.refresh()` (provider + repository
+  used verbatim, no interface change) with the main-owned logger as
+  observer. Success logs `info/api-refresh` carrying real snapshot /
+  excluded counts (message + details); failure logs `error/api-failure`
+  with the failure message and rethrows so scheduler backoff still
+  stamps the streak. Lazy logger supplier resolved per refresh;
+  throwing supplier degrades to null; logging never throws into the
+  pipeline on either path (never turns success into failure, never
+  masks the original error).
+- `electron/main.ts`: scheduler refresh is now
+  `createLoggingRefresh(() => getAppLogger(), createPipelineRefresh(...))`
+  over `createHistoryRepository` (SQLite when available, JSON fallback)
+  with per-refresh `() => getAppLogger()` resolution on both layers;
+  startup backend log kept on the S19 `void` + `.catch` idiom;
+  `before-quit` releases the backend via `closeHistoryRepository`
+  without blocking shutdown.
+- Tests: `tests/diagnostics/refreshPipeline.test.ts` (new, 7 tests:
+  success count log, failure error log + rethrow, null pass-through,
+  throwing-logger both paths, throwing-supplier degrade, composition
+  with `createLoggingRefresh` proving api-failure + scheduler
+  adjacency) — 372 total (365 → 372).
+
+**Decisions:**
+- Pipeline composes under the S19 logging bridge rather than replacing
+  it: the refresh log carries the counts, the adjacent `scheduler`
+  event carries the outcome — no layer reformats the other's event.
+- Failure rethrows by design (S19 backoff contract intact); only the
+  logging itself is swallowed, never the pipeline error.
+- Double single-flight (`SnapshotService` inFlight under scheduler
+  inFlight) accepted as defense-in-depth, no action.
+
+**Verified:**
+- `npm test` → 60 files, 372/372 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Review #202 CLEAR on `a8ec1d3` (agent-b independently re-verified
+  372/372 + typecheck + build, pure core untouched, scope honored).
+
+**Carried nits (non-gating, review #202):**
+- `before-quit` comment claims close failures are "already visible via
+  the refresh log" — a `close()` throw would not appear there;
+  harmless since swallowed by design.
+- Live history now accumulates while Top-10/history IPC fixtures stay
+  stub — renderer diverges from stored history until the scorer slice;
+  honestly documented in code (`refreshPipeline.ts` boundary note),
+  scorer-over-history ranking counts are the load-bearing next slice.
+- Renderer log-viewer UI still queued behind the scorer slice (read
+  path already proven).
+
 ## Sprint 19 (slice 3) — Retained logger + scheduler logging + read-only log IPC (2026-09-16)
 
 **Goal:** close the review #193 carried nit (callback-local logger
