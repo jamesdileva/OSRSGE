@@ -33,16 +33,25 @@ export function createMappingNameCache(): MappingNameCache {
   return {
     resolveName,
     loadFromMapping(snapshot: MappingSnapshot): void {
-      names.clear();
-      for (const item of snapshot?.items ?? []) {
+      // Atomic swap: validate + build temp first, swap only on success so a
+      // malformed snapshot never wipes previous good names (S21 slice-3).
+      if (!snapshot || !Array.isArray(snapshot.items)) {
+        throw new TypeError('Invalid mapping snapshot: items must be an array');
+      }
+      const next = new Map<number, string>();
+      for (const item of snapshot.items) {
         if (
           typeof item?.id === 'number' &&
           Number.isInteger(item.id) &&
           typeof item?.name === 'string' &&
           item.name.trim() !== ''
         ) {
-          names.set(item.id, item.name);
+          next.set(item.id, item.name.trim());
         }
+      }
+      names.clear();
+      for (const [id, name] of next) {
+        names.set(id, name);
       }
     },
     size: () => names.size,
@@ -51,7 +60,9 @@ export function createMappingNameCache(): MappingNameCache {
 
 /**
  * One bulk `/mapping` pull into the cache. Returns `true` on success,
- * `false` on any provider/validation failure (previous names kept).
+ * `false` on any provider/validation failure (previous names kept —
+ * the swap in `loadFromMapping` only runs after validation, so a
+ * malformed-but-resolving snapshot can never wipe the cache).
  * Never rejects.
  */
 export async function refreshMappingNameCache(

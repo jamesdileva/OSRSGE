@@ -89,6 +89,51 @@ describe('S21 slice-2 mapping name cache (offline)', () => {
     expect(cache.resolveName(4151)).toBe('Abyssal whip');
   });
 
+  it('malformed snapshots fail closed keeping previous names (atomic swap)', async () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(mapping());
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+
+    // Direct load with a non-array items payload throws without wiping.
+    expect(() => cache.loadFromMapping({ items: {} } as never)).toThrow(TypeError);
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+    expect(() => cache.loadFromMapping(null as never)).toThrow(TypeError);
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+
+    // Refresh path: malformed-but-resolving provider returns false, keeps names.
+    const badShapes = [null, { items: {} }, {}];
+    for (const shape of badShapes) {
+      const ok = await refreshMappingNameCache(cache, {
+        getMapping: async () => shape as never,
+      });
+      expect(ok).toBe(false);
+      expect(cache.resolveName(4151)).toBe('Abyssal whip');
+      expect(cache.size()).toBe(1);
+    }
+  });
+
+  it('stores trimmed names', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping({
+      items: [
+        {
+          id: 4151,
+          name: '  Abyssal whip  ',
+          examine: '',
+          members: true,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: 70,
+          value: null,
+          icon: '',
+        },
+      ],
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+  });
+
   it('main wiring pattern: served Top-10 and observed counts share the cache resolver', async () => {
     const cache = createMappingNameCache();
     await refreshMappingNameCache(cache, { getMapping: async () => mapping() });
