@@ -343,7 +343,9 @@ export default function Dashboard({
         } else {
           // S20 slice-5: never retain stale events alongside an error —
           // a failed side clears to null so the panel shows error, not
-          // last-good masquerading as current.
+          // last-good masquerading as current. Partial-preserve intent:
+          // a fulfilled side stays visible alongside the joined error so
+          // one bad read never hides the other side's good data.
           setLogEvents(null);
         }
         if (summaryResult.status === 'fulfilled') {
