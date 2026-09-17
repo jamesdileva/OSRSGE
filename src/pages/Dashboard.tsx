@@ -18,6 +18,8 @@ import { calcFlip } from '../../core/market/flips/flipCalculator.js';
 import type { FlipInput, FlipResult } from '../../core/market/flips/flipCalculator.js';
 import { assessDataQuality } from '../../core/market/quality/qualityAssessment.js';
 import type { QualityAssessment } from '../../core/market/quality/qualityAssessment.js';
+import { MAX_LOG_ENTRIES, summarizeLog } from '../../core/diagnostics/appLog.js';
+import type { AppLogEvent, LogSummary } from '../../core/diagnostics/appLog.js';
 import MarketSummary from '../components/dashboard/MarketSummary.tsx';
 import FilterBar from '../components/dashboard/FilterBar.tsx';
 import ItemDetailsPanel from '../components/dashboard/ItemDetailsPanel.tsx';
@@ -27,8 +29,9 @@ import WatchlistPanel from '../components/dashboard/WatchlistPanel.tsx';
 import AlertsPanel from '../components/dashboard/AlertsPanel.tsx';
 import FlipCalculatorPanel from '../components/dashboard/FlipCalculatorPanel.tsx';
 import DataQualityPanel from '../components/dashboard/DataQualityPanel.tsx';
+import LogViewerPanel from '../components/dashboard/LogViewerPanel.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { addAlertRuleRequest, addWatchedItem, assessQualityRequest, calculateFlipRequest, fetchAlertRules, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
+import { addAlertRuleRequest, addWatchedItem, assessQualityRequest, calculateFlipRequest, fetchAlertRules, fetchLogRecent, fetchLogSummary, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
@@ -142,6 +145,13 @@ export default function Dashboard({
   // history batch already held (no fetch); empty when nothing is loaded.
   const [qualityAssessment, setQualityAssessment] = useState<QualityAssessment | null>(null);
   const [qualityError, setQualityError] = useState<string | null>(null);
+  // S20 slice-4: log-viewer reads. The Dashboard owns reading — bridge
+  // fetchLogRecent/fetchLogSummary with empty-read fallback otherwise
+  // (S19 slice-3b null-logger precedent). Manual refresh only: no auto-poll
+  // on mount, no scheduler-notify subscription (minimal scope, D#1102).
+  const [logEvents, setLogEvents] = useState<AppLogEvent[] | null>(null);
+  const [logSummary, setLogSummary] = useState<LogSummary | null>(null);
+  const [logError, setLogError] = useState<string | null>(null);
   const bridgeAvailable = isDesktopBridgeAvailable();
 
   const status = statusProp ?? bridgeStatus;
@@ -315,6 +325,25 @@ export default function Dashboard({
       .catch((err: unknown) => {
         setQualityAssessment(null);
         setQualityError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  const handleRefreshLogs = (): void => {
+    const api = getDesktopApi();
+    if (api?.logs == null || typeof api.logs.getRecent !== 'function' || typeof api.logs.getSummary !== 'function') {
+      setLogEvents([]);
+      setLogSummary(summarizeLog([]));
+      setLogError(null);
+      return;
+    }
+    Promise.all([fetchLogRecent({ limit: MAX_LOG_ENTRIES }), fetchLogSummary()])
+      .then(([recent, summaryResponse]) => {
+        setLogEvents(recent.events);
+        setLogSummary(summaryResponse.summary);
+        setLogError(null);
+      })
+      .catch((err: unknown) => {
+        setLogError(err instanceof Error ? err.message : 'Unknown error');
       });
   };
 
@@ -583,6 +612,12 @@ export default function Dashboard({
         <>
           <h2>Data quality</h2>
           <DataQualityPanel assessment={qualityAssessment} error={qualityError} onAssess={handleAssessQuality} />
+        </>
+      )}
+      {(status === 'idle' || status === 'success') && (
+        <>
+          <h2>Application log</h2>
+          <LogViewerPanel events={logEvents} summary={logSummary} error={logError} onRefresh={handleRefreshLogs} />
         </>
       )}
 
