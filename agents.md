@@ -4,6 +4,46 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (slice 1) — Sync name-injection seam for real item names (2026-09-17)
+
+**Goal:** smallest honest step toward retiring the `Item <id>` fallback:
+a sync `ItemNameResolver` seam so cached `/mapping` names can flow into
+both observed counts and served Top-10 with zero fetch in the
+pipeline/serve path. Async mapping population stays the next slice.
+
+**Did:**
+- `electron/services/rankEntries.ts`: `buildRankEntries` gains optional
+  `resolveName?: ItemNameResolver` — non-empty trimmed resolver result
+  wins, otherwise the honest `Item <id>` fallback (per-id, so unknown
+  ids still render honestly). Members/buyLimit untouched (still neutral
+  defaults).
+- `electron/services/refreshPipeline.ts` + `liveMarket.ts`:
+  `scoreBatchSnapshots` / `rankBatchToTop10` / `createLiveTop10Handler`
+  forward the optional resolver (all params optional-appended, existing
+  2-arg callers unaffected); served/observed still share the one builder
+  so they can never drift.
+- Tests: `tests/market/itemNames.test.ts` (new, 4 tests: default
+  fallback, cached-names both paths + counts name-independent,
+  unknown/empty per-id fallback + frozen safety, handler forwarding) —
+  402 total (398 → 402).
+
+**Decisions:**
+- Sync injection by design: the pipeline/serve path stays sync and
+  fetch-free (S17/S20 perf precedent); the async `/mapping` cache load
+  (ItemMetadataStore) is populated elsewhere in the next slice.
+- Name-only in this slice: members/buyLimit enrichment stays out so
+  filters keep current semantics until real metadata is wired.
+
+**Verified:**
+- `npm test` → 63 files, 402/402 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Main still passes no resolver (live Top-10 serves `Item <id>` until
+  the mapping-cache slice lands).
+- Members/buyLimit still neutral defaults; `Item <id>` fallback stands
+  without cached names.
+
 ## Sprint 20 (slice 5) — Log-viewer carried-nit fixes (2026-09-17)
 
 **Goal:** close the three slice-4 carried nits from review #225 with no
