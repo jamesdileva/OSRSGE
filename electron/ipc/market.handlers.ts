@@ -7,13 +7,14 @@ export interface MarketHandlerDeps {
   getHistory?: (request: MarketHistoryRequest) => MarketHistoryResponse | Promise<MarketHistoryResponse>;
 }
 
-/** Sprint 7 slice-2 stub-feed channel: main returns a fixture, never a live pipeline (D#163). */
+/** Sprint 20 slice-3 live market channels: main serves the last persisted batch + stored history (no stub). */
 export function registerMarketHandlers(ipcMain: IpcMainHandler, deps: MarketHandlerDeps): void {
   ipcMain.handle(MARKET_GET_TOP10, (_event: unknown, request?: unknown) =>
     deps.getTop10(request as MarketTop10Request | undefined),
   );
-  // History surface is optional so Slice-1-era callers keep working; the
-  // production main always injects the stub getHistory (Sprint 8 slice-2).
+  // History surface is optional so pre-S8 callers keep working; the
+  // production main always injects the live history handler over the
+  // selected backend (Sprint 20 slice-3).
   if (deps.getHistory !== undefined) {
     const getHistory = deps.getHistory;
     ipcMain.handle(MARKET_GET_HISTORY, (_event: unknown, request?: unknown) =>

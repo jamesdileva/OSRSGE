@@ -1,13 +1,12 @@
 import type { HistoryRepository } from '../../core/history/HistoryRepository.js';
 import type { MarketDataProvider } from '../../core/market/providers/MarketDataProvider.js';
 import { SnapshotService } from '../../core/history/snapshotService.js';
-import { computeMetrics } from '../../core/market/analytics/metrics.js';
 import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import {
   defaultRankingConfig,
   rankOpportunities,
-  type RankEntry,
 } from '../../core/market/ranking/scorer.js';
+import { buildRankEntries } from './rankEntries.js';
 import type { AppLogger } from './appLogger.js';
 
 /**
@@ -34,12 +33,13 @@ import type { AppLogger } from './appLogger.js';
  *   on price only; risk/confidence degrade gracefully instead of dropping
  *   the whole universe on the depth filter. Full-history depth gating
  *   returns when stored-history windowing arrives.
- * - Observed, never served: the counts are named `rankingCandidates` /
- *   `ranked` (what the scorer saw), never "served". Top-10/history IPC
- *   fixtures stay stub (S20 slice-1 divergence documented there) — the
- *   renderer still shows the stub fixture until a later slice wires
- *   serving. Unknown ids fall back to `Item <id>` (S2/S14 precedent);
- *   no metadata fetch in the pipeline.
+ * - Observed, never served here: the counts are named `rankingCandidates` /
+ *   `ranked` (what the scorer saw), never "served". S20 slice-3 serves the
+ *   same batch over Top-10/history IPC (`electron/services/liveMarket.ts`
+ *   ranks the published batch with the shared `buildRankEntries` helper —
+ *   the S7/S8 stub fixtures are retired, dead-in-prod in
+ *   `electron/ipc/marketStub.ts`). Unknown ids fall back to `Item <id>`
+ *   (S2/S14 precedent); no metadata fetch in the pipeline.
  * - Perf guard (S17 lesson): single O(N) in-memory pass over the batch,
  *   zero repository reads (no per-item `getItemHistory` scan — the 8 s
  *   full-week cost stays out of the refresh path). Full-universe
@@ -68,33 +68,16 @@ export type RankSnapshotsFn = (
 /**
  * Default scorer over the just-saved batch: per-snapshot single-point
  * metrics at the batch timestamp → `rankOpportunities` with the default
- * BALANCED config. Frozen-input safe (reads only, fresh entry objects);
- * metadata is the `Item <id>` fallback so the pipeline never fetches.
+ * BALANCED config. Delegates to the shared `buildRankEntries` helper so
+ * observed counts can never drift from the served Top-10 (cleanup slice);
+ * frozen-input safe (reads only, fresh entry objects); metadata is the
+ * `Item <id>` fallback so the pipeline never fetches.
  */
 export function scoreBatchSnapshots(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
 ): RankingCounts {
-  const entries: RankEntry[] = [];
-  for (const snapshot of snapshots) {
-    const metrics = computeMetrics(snapshot.itemId, [snapshot], timestamp);
-    if (metrics === null) {
-      continue;
-    }
-    entries.push({
-      metrics,
-      item: {
-        id: snapshot.itemId,
-        name: `Item ${snapshot.itemId}`,
-        members: false,
-        buyLimit: null,
-        examine: '',
-        value: null,
-      },
-      observationCount: 1,
-      stalenessMinutes: 0,
-    });
-  }
+  const entries = buildRankEntries(snapshots, timestamp);
   const ranked = rankOpportunities(entries, defaultRankingConfig()).length;
   return { rankingCandidates: entries.length, ranked };
 }
@@ -111,6 +94,10 @@ export interface PipelineRefreshDeps {
    * Invoked after persist + scorer success; a throwing callback is
    * swallowed (publishing must not turn success into failure). Failure
    * paths never publish — the store keeps the last good batch.
+   * Cleanup note: callers should copy the array (`[...snapshots]`) — the
+   * copy is array-only, snapshot objects stay aliased. Safe while the
+   * pipeline owns the batch (it never mutates after persist); main's
+   * `liveStore.set` follows this pattern.
    */
   onBatch?: (snapshots: readonly MarketSnapshot[], timestamp: number) => void;
 }
@@ -126,29 +113,48 @@ function resolvePipelineLogger(logger: PipelineLogger): Pick<AppLogger, 'log'> |
   return logger ?? null;
 }
 
+/**
+ * Cleanup slice: capturing wrapper extracted so tests can prove the
+ * wrapper itself forwards `getItemHistory`/`getLatestSnapshot` with the
+ * prototype intact (review #216 nit — the old test called the original
+ * repo directly, which could not disconfirm a broken wrapper).
+ * Behavior identical to the inline version it replaces.
+ */
+export function wrapRepositoryWithCapture(original: HistoryRepository): {
+  repository: HistoryRepository;
+  getCaptured: () => MarketSnapshot[] | null;
+} {
+  let captured: MarketSnapshot[] | null = null;
+  const repository: HistoryRepository = {
+    saveSnapshots: async (snapshots) => {
+      captured = snapshots;
+      return original.saveSnapshots(snapshots);
+    },
+    getItemHistory: (...args) => original.getItemHistory(...args),
+    getLatestSnapshot: (...args) => original.getLatestSnapshot(...args),
+  };
+  return { repository, getCaptured: () => captured };
+}
+
 export function createPipelineRefresh(deps: PipelineRefreshDeps): () => Promise<void> {
   // Capture the normalized batch without touching the service/repository
   // interfaces: the wrapper observes the `saveSnapshots` argument the
   // pipeline already persists, so scoring needs zero extra repository
   // reads (S17 perf guard) and zero extra provider pulls.
   // Review #206 nit: explicit delegation (not `{...deps.repository}`)
-  // so class-prototype methods survive the wrap.
-  let captured: MarketSnapshot[] | null = null;
-  const capturingRepository: HistoryRepository = {
-    saveSnapshots: async (snapshots) => {
-      captured = snapshots;
-      return deps.repository.saveSnapshots(snapshots);
-    },
-    getItemHistory: (...args) => deps.repository.getItemHistory(...args),
-    getLatestSnapshot: (...args) => deps.repository.getLatestSnapshot(...args),
-  };
+  // so class-prototype methods survive the wrap. Extracted as
+  // `wrapRepositoryWithCapture` (cleanup slice) so tests can prove the
+  // wrapper forwards through the capturing layer, not around it.
+  const { repository: capturingRepository, getCaptured } = wrapRepositoryWithCapture(
+    deps.repository,
+  );
   const service = new SnapshotService(deps.provider, capturingRepository);
   const rankSnapshots = deps.rankSnapshots ?? scoreBatchSnapshots;
   return async (): Promise<void> => {
     const resolved = resolvePipelineLogger(deps.logger);
     try {
-      captured = null;
       const result = await service.refresh();
+      const captured = getCaptured();
       // A throwing scorer is a pipeline failure like any other: it maps
       // to `api-failure` + rethrow below (backoff preserved).
       const counts = rankSnapshots(captured ?? [], result.timestamp);

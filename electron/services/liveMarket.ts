@@ -1,13 +1,12 @@
 import type { HistoryRepository } from '../../core/history/HistoryRepository.js';
-import { computeMetrics } from '../../core/market/analytics/metrics.js';
 import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import {
   defaultRankingConfig,
   rankOpportunities,
-  type RankEntry,
 } from '../../core/market/ranking/scorer.js';
 import { rankingVersionForPreset } from '../../core/market/ranking/weights.js';
 import { applyFilters, decodeFiltersFromIpc } from '../../core/market/ranking/filters.js';
+import { buildRankEntries } from './rankEntries.js';
 import type {
   MarketHistoryRequest,
   MarketHistoryResponse,
@@ -62,28 +61,10 @@ export function createLiveMarketStore(): LiveMarketStore {
 function buildLiveEntries(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
-): RankEntry[] {
-  const entries: RankEntry[] = [];
-  for (const snapshot of snapshots) {
-    const metrics = computeMetrics(snapshot.itemId, [snapshot], timestamp);
-    if (metrics === null) {
-      continue;
-    }
-    entries.push({
-      metrics,
-      item: {
-        id: snapshot.itemId,
-        name: `Item ${snapshot.itemId}`,
-        members: false,
-        buyLimit: null,
-        examine: '',
-        value: null,
-      },
-      observationCount: 1,
-      stalenessMinutes: 0,
-    });
-  }
-  return entries;
+): ReturnType<typeof buildRankEntries> {
+  // Cleanup slice: thin alias over the shared builder so served Top-10
+  // can never drift from the pipeline's observed counts.
+  return buildRankEntries(snapshots, timestamp);
 }
 
 /**

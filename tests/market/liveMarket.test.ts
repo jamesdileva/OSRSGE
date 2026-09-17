@@ -7,7 +7,12 @@ import {
   createLiveTop10Handler,
   rankBatchToTop10,
 } from '../../electron/services/liveMarket.js';
-import { createPipelineRefresh } from '../../electron/services/refreshPipeline.js';
+import { buildRankEntries } from '../../electron/services/rankEntries.js';
+import {
+  createPipelineRefresh,
+  scoreBatchSnapshots,
+  wrapRepositoryWithCapture,
+} from '../../electron/services/refreshPipeline.js';
 import type { HistoryRepository } from '../../core/history/HistoryRepository.js';
 import type { LatestSnapshot } from '../../core/market/providers/MarketDataProvider.js';
 
@@ -165,6 +170,7 @@ describe('S20 slice-3 live Top-10/history IPC (offline)', () => {
       invalidRecords: 0,
     };
     let historyCalls = 0;
+    let latestCalls = 0;
     class ProtoRepository implements HistoryRepository {
       async saveSnapshots(): Promise<void> {
         return undefined;
@@ -174,17 +180,35 @@ describe('S20 slice-3 live Top-10/history IPC (offline)', () => {
         return [];
       }
       async getLatestSnapshot(): Promise<null> {
+        latestCalls += 1;
         return null;
       }
     }
     const repository = new ProtoRepository();
+    // Prove the capturing wrapper itself forwards (not the original repo):
+    // calls through the wrapper must reach the prototype methods.
+    const { repository: wrapped, getCaptured } = wrapRepositoryWithCapture(repository);
+    await wrapped.getItemHistory(4151, 0, T0);
+    await wrapped.getLatestSnapshot(4151);
+    expect(historyCalls).toBe(1);
+    expect(latestCalls).toBe(1);
+    expect(getCaptured()).toBeNull();
+    // And the pipeline still persists through the same wrapper shape.
     await createPipelineRefresh({
       provider: { getLatest: async () => latest },
       repository,
       logger: null,
     })();
-    // The capturing wrapper must not lose prototype methods.
-    await (repository as HistoryRepository).getItemHistory(4151, 0, T0);
-    expect(historyCalls).toBe(1);
+    await wrapped.getItemHistory(4151, 0, T0);
+    expect(historyCalls).toBe(2);
+  });
+
+  it('served Top-10 agrees with observed scorer counts over the shared builder (no drift)', () => {
+    const { snapshots } = batch();
+    const counts = scoreBatchSnapshots(snapshots, T0);
+    const served = rankBatchToTop10(snapshots, T0);
+    expect(served.itemsAnalyzed).toBe(snapshots.length);
+    expect(served.opportunities).toHaveLength(counts.ranked);
+    expect(counts.rankingCandidates).toBe(buildRankEntries(snapshots, T0).length);
   });
 });

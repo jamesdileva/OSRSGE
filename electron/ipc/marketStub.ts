@@ -4,6 +4,12 @@ import type { Opportunity } from '../../core/market/ranking/types.js';
 import { applyFilters, decodeFiltersFromIpc } from '../../core/market/ranking/filters.js';
 
 /**
+ * @deprecated Dead in prod since Sprint 20 slice-3 — the live Top-10/history
+ * IPC (`electron/services/liveMarket.ts` over the S20 pipeline) retired this
+ * fixture. Retained ONLY for pre-S20 tests (filterWire, market, refresh
+ * pipeline, price-history) so their historical stub-contract asserts keep
+ * running. Do not import from production code; do not extend.
+ *
  * Sprint 7 slice-2 stub feed (D#163 scope guardrail).
  * Returns a fixed fixture — never touches the live provider, scorer,
  * history, or scheduler. The live pipeline arrives in later sprints;
