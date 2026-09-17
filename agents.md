@@ -4,6 +4,49 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (slice 3) — Atomic mapping swap + trim-on-store (2026-09-17)
+
+**Goal:** close the review #239 load-bearing bug (atomic-swap violation):
+`loadFromMapping` cleared before validating, so a malformed-but-resolving
+`/mapping` wiped good names — contradicting the fail-open claim. Fix with
+temp-map-then-swap + trim-on-store + fail-closed malformed.
+
+**Did:**
+- `electron/services/mappingCache.ts`: `loadFromMapping` now validates
+  (`!snapshot || !Array.isArray(items)` → `TypeError`) and builds a temp
+  `Map` first, swapping (`clear` + copy) only after a clean iteration —
+  no clear-on-failure path remains. Stores `name.trim()` so the cache is
+  consistent with the rankEntries trim-at-use. `refreshMappingNameCache`
+  unchanged in shape (try/catch → `false` keeping previous) — now actually
+  atomic because the throw happens before any mutation.
+- Tests: `tests/market/mappingCache.test.ts` +2 (6 total): malformed
+  fail-closed matrix (`null`, `{items:{}}`, `{}` via refresh → `false` +
+  names + size kept; direct `loadFromMapping` throws `TypeError` without
+  wiping) + trim-on-store (`'  Abyssal whip  '` → `'Abyssal whip'`) —
+  408 total (406 → 408).
+
+**Decisions:**
+- Fail-closed malformed by design: a resolving-but-bad `/mapping` shape
+  returns `false` and keeps previous names (possibly empty → honest
+  `Item <id>` fallback) — mapping outages/bad payloads never wipe the
+  cache into a worse state.
+- Trim-on-store (not just trim-at-use): the cache holds canonical names;
+  rankEntries trim stays as a second guard.
+- Periodic re-warm stays deferred: startup-warm-only staleness carried —
+  scheduler hook vs refresh-count gate is the next slice's decision, still
+  no per-refresh bulk pull.
+
+**Verified:**
+- `npm test` → 408/408 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Cache warms once at startup; no periodic re-warm on later refreshes
+  (next slice decision).
+- Members/buyLimit still neutral defaults; blank/unknown ids still
+  `Item <id>` fallback.
+- Main wiring proven only by pattern test, not main.ts resolver identity.
+
 ## Sprint 21 (slice 2) — Async /mapping name-cache wiring in main (2026-09-17)
 
 **Goal:** close the slice-1 carried nit (main passed no resolver):
