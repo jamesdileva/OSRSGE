@@ -6,7 +6,7 @@ import {
 } from '../../core/market/ranking/scorer.js';
 import { rankingVersionForPreset } from '../../core/market/ranking/weights.js';
 import { applyFilters, decodeFiltersFromIpc } from '../../core/market/ranking/filters.js';
-import { buildRankEntries } from './rankEntries.js';
+import { buildRankEntries, type ItemNameResolver } from './rankEntries.js';
 import type {
   MarketHistoryRequest,
   MarketHistoryResponse,
@@ -61,10 +61,13 @@ export function createLiveMarketStore(): LiveMarketStore {
 function buildLiveEntries(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
+  resolveName?: ItemNameResolver,
 ): ReturnType<typeof buildRankEntries> {
   // Cleanup slice: thin alias over the shared builder so served Top-10
   // can never drift from the pipeline's observed counts.
-  return buildRankEntries(snapshots, timestamp);
+  // S21 slice-1: forwards the sync name lookup (cached /mapping names);
+  // default stays the honest `Item <id>` fallback (no fetch in serve).
+  return buildRankEntries(snapshots, timestamp, resolveName);
 }
 
 /**
@@ -75,8 +78,12 @@ export function rankBatchToTop10(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
   request?: MarketTop10Request,
+  resolveName?: ItemNameResolver,
 ): MarketTop10Response {
-  const ranked = rankOpportunities(buildLiveEntries(snapshots, timestamp), defaultRankingConfig());
+  const ranked = rankOpportunities(
+    buildLiveEntries(snapshots, timestamp, resolveName),
+    defaultRankingConfig(),
+  );
   const filtered =
     request?.filters !== undefined ? applyFilters(ranked, decodeFiltersFromIpc(request.filters)) : ranked;
   const limit = request?.limit ?? filtered.length;
@@ -95,6 +102,7 @@ export function rankBatchToTop10(
 export function createLiveTop10Handler(
   store: Pick<LiveMarketStore, 'get'>,
   now: () => number = Date.now,
+  resolveName?: ItemNameResolver,
 ): (request?: MarketTop10Request) => MarketTop10Response {
   return (request?: MarketTop10Request): MarketTop10Response => {
     const batch = store.get();
@@ -106,7 +114,7 @@ export function createLiveTop10Handler(
         opportunities: [],
       };
     }
-    return rankBatchToTop10(batch.snapshots, batch.timestamp, request);
+    return rankBatchToTop10(batch.snapshots, batch.timestamp, request, resolveName);
   };
 }
 

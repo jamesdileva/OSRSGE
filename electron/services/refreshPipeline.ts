@@ -6,7 +6,7 @@ import {
   defaultRankingConfig,
   rankOpportunities,
 } from '../../core/market/ranking/scorer.js';
-import { buildRankEntries } from './rankEntries.js';
+import { buildRankEntries, type ItemNameResolver } from './rankEntries.js';
 import type { AppLogger } from './appLogger.js';
 
 /**
@@ -70,14 +70,16 @@ export type RankSnapshotsFn = (
  * metrics at the batch timestamp → `rankOpportunities` with the default
  * BALANCED config. Delegates to the shared `buildRankEntries` helper so
  * observed counts can never drift from the served Top-10 (cleanup slice);
- * frozen-input safe (reads only, fresh entry objects); metadata is the
- * `Item <id>` fallback so the pipeline never fetches.
+ * frozen-input safe (reads only, fresh entry objects). Name resolution is
+ * an optional sync lookup (S21 slice-1 seam); default is the `Item <id>`
+ * fallback so the pipeline never fetches.
  */
 export function scoreBatchSnapshots(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
+  resolveName?: ItemNameResolver,
 ): RankingCounts {
-  const entries = buildRankEntries(snapshots, timestamp);
+  const entries = buildRankEntries(snapshots, timestamp, resolveName);
   const ranked = rankOpportunities(entries, defaultRankingConfig()).length;
   return { rankingCandidates: entries.length, ranked };
 }
