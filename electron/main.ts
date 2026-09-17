@@ -11,9 +11,10 @@ import { registerMarketHandlers } from './ipc/market.handlers.js';
 import { registerQualityHandlers } from './ipc/quality.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { createLiveHistoryHandler, createLiveMarketStore, createLiveTop10Handler } from './services/liveMarket.js';
+import { createMappingNameCache, refreshMappingNameCache } from './services/mappingCache.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
 import { getAppLogger, initAppLogger } from './services/appLogger.js';
-import { createPipelineRefresh } from './services/refreshPipeline.js';
+import { createPipelineRefresh, scoreBatchSnapshots } from './services/refreshPipeline.js';
 import { createLoggingRefresh, startScheduler, stopScheduler, toSchedulerUpdate } from './services/scheduler.js';
 import { getWindowOptions } from './window.js';
 import { JsonWatchlistRepository } from '../storage/json/JsonWatchlistRepository.js';
@@ -66,7 +67,11 @@ void app.whenReady().then(async () => {
   // fixture. The store is module-scoped here and published by the
   // pipeline's onBatch below.
   const liveStore = createLiveMarketStore();
-  const liveTop10 = createLiveTop10Handler(liveStore);
+  // S21 slice-2: async /mapping name cache over the slice-1 sync seam.
+  // Sync read path stays fetch-free; this map is warmed once below
+  // (best-effort) and read synchronously by both served + observed paths.
+  const mappingNames = createMappingNameCache();
+  const liveTop10 = createLiveTop10Handler(liveStore, Date.now, mappingNames.resolveName);
   registerMarketHandlers(ipcMain, {
     getTop10: (request) => liveTop10(request),
     // History backend resolves lazily per request: registration runs
@@ -126,13 +131,31 @@ void app.whenReady().then(async () => {
   void getAppLogger()
     ?.log('info', 'startup', `history backend: ${historyBackend}`)
     ?.catch(() => undefined);
+  // S21 slice-2 warm: one bulk /mapping pull (best-effort, never blocks
+  // startup or refresh — failure keeps the honest `Item <id>` fallback).
+  const priceProvider = new WikiPriceProvider();
+  void refreshMappingNameCache(mappingNames, priceProvider).then((ok) => {
+    void getAppLogger()
+      ?.log(
+        'info',
+        'startup',
+        ok
+          ? `mapping names: ${mappingNames.size()} cached`
+          : 'mapping names: unavailable, using Item <id> fallback',
+      )
+      ?.catch(() => undefined);
+  });
   const scheduler = startScheduler(undefined, {
     refresh: createLoggingRefresh(
       () => getAppLogger(),
       createPipelineRefresh({
-        provider: new WikiPriceProvider(),
+        provider: priceProvider,
         repository: historyRepository,
         logger: () => getAppLogger(),
+        // Observed counts run through the same sync resolver as the
+        // served Top-10 above so served==observed on names too.
+        rankSnapshots: (snapshots, timestamp) =>
+          scoreBatchSnapshots(snapshots, timestamp, mappingNames.resolveName),
         onBatch: (snapshots, timestamp) => {
           liveStore.set({ snapshots: [...snapshots], timestamp });
         },
