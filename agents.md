@@ -4,6 +4,60 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (re-warm slice) — Header fix + count-gated periodic re-warm (2026-09-17)
+
+**Goal:** close mail #244 scope: fix the stale `Never throws` header nit
+and decide + implement the periodic re-warm (scheduler hook vs
+refresh-count gate) under the carried constraint (no per-refresh bulk
+`/mapping` pull).
+
+**Did:**
+- `electron/services/mappingCache.ts`: header now states the error split
+  explicitly — `loadFromMapping` THROWS `TypeError` fail-closed (mutating
+  nothing) vs `refreshMappingNameCache` NEVER REJECTS (`false` keeping
+  previous names). New `MAPPING_REWARM_INTERVAL_REFRESHES = 288` (~24 h
+  at the 5-min interval) + pure `shouldRewarmMappingNames` (fail-closed
+  `false` on bad counter/interval) + `createMappingRewarmTracker`
+  (`rewarmIfDue` per successful refresh: `skipped` with zero fetch until
+  due, one best-effort pull when due, counter reset on *attempt* so a
+  sustained outage costs ≤1 fetch/interval; never rejects).
+- `electron/main.ts`: module `mappingRewarm` tracker; pipeline `onBatch`
+  (success-only signal) runs `rewarmIfDue` in the background (`void`,
+  never throws into refresh) — `ok` logs `info/api-refresh` with the
+  cached count, `failed` logs `warn/api-refresh` keeping previous names,
+  `skipped` stays silent.
+- Tests: `tests/market/mappingCache.test.ts` +3 (9 total): predicate
+  matrix (bound + fail-closed inputs), hot-path proof (7 refreshes @
+  interval 3 → exactly 2 `getMapping` calls, `skipped` elsewhere),
+  failure proof (failed re-warm keeps names + size, gate resets so no
+  retry storm) — 411 total (408 → 411).
+
+**Decisions:**
+- Count-gate picked, scheduler time-hook rejected: a time hook drifts
+  under backoff/sleep (timers delay while successes accumulate) and
+  needs clock injection for zero benefit; the gate's own idle drift (no
+  successes → no re-warm) is benign — with no fresh price data the
+  served view is equally stale, so name staleness never observably
+  exceeds data staleness.
+- Reset-on-attempt (not on-success): bounds outage fetch cost to the
+  same 1-per-interval as healthy operation; recovery waits at most one
+  more interval — acceptable for display-only names.
+- Staleness bound: ~24 h in healthy operation, extending under outage
+  by design (fail-open keeps previous, honest `Item <id>` fallback at
+  worst).
+
+**Verified:**
+- `npm test` → 64 files, 411/411 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Members/buyLimit still neutral defaults; blank/unknown ids still
+  `Item <id>` fallback.
+- Main wiring proven by tracker unit tests + pattern test, not main.ts
+  resolver identity.
+- Startup-warm failure waits a full interval for the first re-warm (no
+  fast-retry); names stay honest-fallback meanwhile.
+
 ## Sprint 21 (slice 3) — Atomic mapping swap + trim-on-store (2026-09-17)
 
 **Goal:** close the review #239 load-bearing bug (atomic-swap violation):

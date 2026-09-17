@@ -11,7 +11,11 @@ import { registerMarketHandlers } from './ipc/market.handlers.js';
 import { registerQualityHandlers } from './ipc/quality.handlers.js';
 import { registerWatchlistHandlers } from './ipc/watchlist.handlers.js';
 import { createLiveHistoryHandler, createLiveMarketStore, createLiveTop10Handler } from './services/liveMarket.js';
-import { createMappingNameCache, refreshMappingNameCache } from './services/mappingCache.js';
+import {
+  createMappingNameCache,
+  createMappingRewarmTracker,
+  refreshMappingNameCache,
+} from './services/mappingCache.js';
 import { getApplicationVersion, initializeApplicationServices } from './services/application.js';
 import { getAppLogger, initAppLogger } from './services/appLogger.js';
 import { createPipelineRefresh, scoreBatchSnapshots } from './services/refreshPipeline.js';
@@ -71,6 +75,11 @@ void app.whenReady().then(async () => {
   // Sync read path stays fetch-free; this map is warmed once below
   // (best-effort) and read synchronously by both served + observed paths.
   const mappingNames = createMappingNameCache();
+  // Re-warm slice: refresh-count gate (NOT a scheduler time hook — see
+  // `MAPPING_REWARM_INTERVAL_REFRESHES`). `onBatch` fires only after a
+  // successful persist + scorer pass, so counting there bounds the bulk
+  // `/mapping` cost to one fetch per 288 healthy refreshes (~24 h).
+  const mappingRewarm = createMappingRewarmTracker();
   const liveTop10 = createLiveTop10Handler(liveStore, Date.now, mappingNames.resolveName);
   registerMarketHandlers(ipcMain, {
     getTop10: (request) => liveTop10(request),
@@ -158,6 +167,21 @@ void app.whenReady().then(async () => {
           scoreBatchSnapshots(snapshots, timestamp, mappingNames.resolveName),
         onBatch: (snapshots, timestamp) => {
           liveStore.set({ snapshots: [...snapshots], timestamp });
+          // Count-gated re-warm: skipped (no fetch) until due; when due,
+          // one best-effort background pull that never throws into the
+          // refresh. Fail-open keeps previous names on failure.
+          void mappingRewarm.rewarmIfDue(mappingNames, priceProvider).then((outcome) => {
+            if (outcome === 'skipped') {
+              return undefined;
+            }
+            return getAppLogger()?.log(
+              outcome === 'ok' ? 'info' : 'warn',
+              'api-refresh',
+              outcome === 'ok'
+                ? `mapping names re-warmed: ${mappingNames.size()} cached`
+                : 'mapping re-warm failed, keeping previous names',
+            )?.catch(() => undefined);
+          });
         },
       }),
     ),

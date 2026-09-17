@@ -4,7 +4,10 @@ import type { MappingSnapshot } from '../../core/market/providers/MarketDataProv
 import { rankBatchToTop10 } from '../../electron/services/liveMarket.js';
 import {
   createMappingNameCache,
+  createMappingRewarmTracker,
+  MAPPING_REWARM_INTERVAL_REFRESHES,
   refreshMappingNameCache,
+  shouldRewarmMappingNames,
 } from '../../electron/services/mappingCache.js';
 import { scoreBatchSnapshots } from '../../electron/services/refreshPipeline.js';
 
@@ -132,6 +135,68 @@ describe('S21 slice-2 mapping name cache (offline)', () => {
       invalidRecords: 0,
     });
     expect(cache.resolveName(4151)).toBe('Abyssal whip');
+  });
+
+  it('re-warm gate: pure predicate with fail-closed inputs', () => {
+    expect(MAPPING_REWARM_INTERVAL_REFRESHES).toBe(288);
+    expect(shouldRewarmMappingNames(0)).toBe(false);
+    expect(shouldRewarmMappingNames(287)).toBe(false);
+    expect(shouldRewarmMappingNames(288)).toBe(true);
+    expect(shouldRewarmMappingNames(1000)).toBe(true);
+    // Fail-closed: bad counters/intervals never trigger a bulk fetch.
+    expect(shouldRewarmMappingNames(-1)).toBe(false);
+    expect(shouldRewarmMappingNames(NaN)).toBe(false);
+    expect(shouldRewarmMappingNames(1.5)).toBe(false);
+    expect(shouldRewarmMappingNames(288, 0)).toBe(false);
+    expect(shouldRewarmMappingNames(288, -5)).toBe(false);
+    expect(shouldRewarmMappingNames(288, NaN)).toBe(false);
+    // Small interval honored (test hook + documents the gate shape).
+    expect(shouldRewarmMappingNames(2, 3)).toBe(false);
+    expect(shouldRewarmMappingNames(3, 3)).toBe(true);
+  });
+
+  it('re-warm tracker: no fetch in the hot path, one fetch per interval', async () => {
+    const cache = createMappingNameCache();
+    const tracker = createMappingRewarmTracker(3);
+    let calls = 0;
+    const provider = {
+      getMapping: async () => {
+        calls += 1;
+        return mapping();
+      },
+    };
+    // 7 successful refreshes at interval 3 → fetches on #3 and #6 only.
+    const outcomes: string[] = [];
+    for (let i = 0; i < 7; i += 1) {
+      outcomes.push(await tracker.rewarmIfDue(cache, provider));
+    }
+    expect(outcomes).toEqual(['skipped', 'skipped', 'ok', 'skipped', 'skipped', 'ok', 'skipped']);
+    expect(calls).toBe(2);
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+    expect(tracker.successesSinceWarm).toBe(1);
+  });
+
+  it('re-warm tracker: failed re-warm keeps previous names and resets the gate', async () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(mapping());
+    const tracker = createMappingRewarmTracker(2);
+    let calls = 0;
+    const failing = {
+      getMapping: async () => {
+        calls += 1;
+        throw new Error('mapping down');
+      },
+    };
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('skipped');
+    // Due on the 2nd success: attempt fails fail-open, names survive.
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('failed');
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+    expect(cache.size()).toBe(1);
+    expect(calls).toBe(1);
+    // Gate reset on attempt: next success skips (no retry storm).
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('skipped');
+    expect(calls).toBe(1);
+    expect(tracker.successesSinceWarm).toBe(1);
   });
 
   it('main wiring pattern: served Top-10 and observed counts share the cache resolver', async () => {
