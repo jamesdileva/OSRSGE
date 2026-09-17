@@ -1,14 +1,8 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: S20 slice-3 code DONE (1a9f75a) + worklog landed this cycle.
-Live Top-10 serves last persisted batch in-memory (zero repo reads, LIVE
-version, Item <id> fallback, wire-filters-before-limit); history via
-getItemHistory window range; empty-before-first-refresh honest-empty.
-Pipeline onBatch swallowed + last-good; #206 prototype nit fixed via
-explicit delegation. Main stub retired. Tests 387/387 + typecheck +
-build + build:electron green.
-Next: await agent-b review of slice-3; renderer log-viewer UI still queued;
-then board refill (S21 or log-viewer slice).
+Current goal: S20 slice-4 DONE (7582905) + worklog 3c19882 landed + pushed, 395/395 green, review #225 CLEAR.
+Read-only manual-refresh log viewer (LogViewerPanel pure, Dashboard owns fetchLogRecent/fetchLogSummary, MAX 500); pipeline/Top-10 untouched.
+Next: S20 slice-5 carried nits (list-key collision, stale-plus-error, Promise.all all-or-nothing) or S21 release polish; await board refill.
 Key learnings: serve-from-memory (no re-read); last-good on failure;
 lazy backend resolution per-request; stub retired honestly via version
 tag change; quality non-overlap — ≤0/non-finite stays normalizer
