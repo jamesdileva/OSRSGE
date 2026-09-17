@@ -4,6 +4,68 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 20 (slice 3) — Live Top-10/history IPC over the S20 pipeline (2026-09-17)
+
+**Goal:** retire the S7/S8 stub fixtures so the renderer serves what the
+S20 pipeline actually persisted: live Top-10 from the last good batch
+(in-memory, zero repo reads) + live history from the stored backend.
+Close the slice-2 "observed, never served" divergence honestly.
+
+**Did:**
+- `electron/services/liveMarket.ts` (new): `createLiveMarketStore` /
+  `rankBatchToTop10` / `createLiveTop10Handler` /
+  `createLiveHistoryHandler` + `LIVE_RANKING_VERSION`
+  (`rankingVersionForPreset('BALANCED')`, never `0.2-BALANCED-stub`).
+  Top-10 ranks the stored batch with the verbatim S6/S14 math —
+  single-point `computeMetrics` at the batch timestamp + BALANCED
+  `rankOpportunities` + `Item <id>` fallback + `historyMinutes`
+  undefined (same math as the slice-2 observed counts). Zero repository
+  reads (S17 full-week scan stays out of the serve path). Wire filters
+  decoded + applied before the limit slice (S9 precedent);
+  `itemsAnalyzed` stays the unfiltered universe; `computedAt` is the
+  batch timestamp. Empty store serves an honest empty live payload
+  (never the stub). History maps `24h`/`7d` to a `[to-window, to]`
+  `getItemHistory` range, fail-closed on bad itemId/window (async
+  reject, flips/quality precedent).
+- `electron/services/refreshPipeline.ts`: optional `onBatch` publish of
+  the just-persisted batch (after persist + scorer success; throwing
+  callback swallowed so publishing never turns success into failure;
+  failure paths never publish — last-good retained). Review #206
+  prototype nit fixed via explicit delegation
+  (`getItemHistory`/`getLatestSnapshot` forward, no `{...spread}`).
+- `electron/main.ts`: stub retired. Module-scoped `liveStore` published
+  by the pipeline's `onBatch` (defensive copy); `getTop10` serves it;
+  `getHistory` resolves the module `historyRepository` lazily per
+  request (fail-closed `History backend not ready` before the selector
+  assigns), delegating to the live history handler over SQLite-or-JSON.
+- Tests: `tests/market/liveMarket.test.ts` (new, 9 tests: honest-empty,
+  live version + 100 GP price floor, wire-filters-before-limit,
+  frozen-input purity, window→range mapping, bad-input reject,
+  publish + last-good-on-failure, throwing-onBatch swallowed,
+  prototype-delegation) — 387 total (378 → 387).
+
+**Decisions:**
+- Serve from memory, not from a re-read: the pipeline already holds the
+  normalized batch, so Top-10 needs zero extra pulls/reads; history
+  stays a thin single-item range (the 8 s full-week cost never enters
+  either path).
+- Last-good serving by design: a failed refresh keeps the previous batch
+  (scheduler backoff still stamps the streak via the unchanged
+  `api-failure` + rethrow path).
+- Stub retired honestly: empty-before-first-refresh is empty-live, not a
+  fixture; the version tag change makes the swap visible to callers.
+
+**Verified:**
+- `npm test` → 61 files, 387/387 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Awaiting agent-b review.
+
+**Carried nits (non-gating):**
+- Slice-2 perf-test wall-clock + concurrent-`captured` notes still open
+  (benign under the double single-flight).
+- Renderer log-viewer UI still queued (read path proven, S19 slice-3b).
+- `Item <id>` fallback still stands (no metadata fetch in pipeline/serve).
+
 ## Sprint 20 (slice 2) — Scorer counts in the api-refresh log (2026-09-16)
 
 **Goal:** answer "why didn't the rankings update?" with evidence in the
