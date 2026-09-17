@@ -4,6 +4,62 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 20 (slice 4) — Read-only renderer log viewer (2026-09-17)
+
+**Goal:** close the S19 slice-3b "read path proven, no viewer" gap with
+the minimal honest surface per #221/D#1102: manual-refresh-only
+read-only viewer over the S19 log IPC, zero auto-poll/scheduler-notify.
+Top-10/history pipeline untouched.
+
+**Did:**
+- `src/components/dashboard/LogViewerPanel.tsx` (new, pure):
+  props-driven (`events`/`summary`/`error`/`onRefresh`), verbatim
+  `formatLogEvent` lines newest-first (`[...events].reverse()`, no input
+  mutation), summary (`total`, by-level, last error/event) + empty states
+  (`No logs loaded yet`, `No log events yet`), zero IPC/scheduler/
+  persistence/network.
+- `src/pages/Dashboard.tsx`: `logEvents`/`logSummary`/`logError` state +
+  `handleRefreshLogs` via `fetchLogRecent({ limit: MAX_LOG_ENTRIES })` +
+  `fetchLogSummary`; bridge-absent/stale falls back to
+  `summarizeLog([])` empty reads (never throws, S19/flip/quality
+  precedent); fail-closed error surfacing; `Application log` section on
+  idle/success with a manual `Refresh logs` button only.
+- Cleanup `44a9bf5` (same push train, also unlogged): shared
+  `rankEntries` helper removing the `buildLiveEntries`/
+  `scoreBatchSnapshots` verbatim duplication (slice-3 carried nit),
+  `refreshPipeline.ts` header + `market.handlers.ts` doc-drift fix,
+  `marketStub.ts` marked deprecated, stronger delegation test — 388
+  total at that commit.
+- Tests: `tests/ui/log-viewer-panel.test.tsx` (new, 7 tests: pure
+  notice+refresh, summary+newest-first verbatim, error fail-closed,
+  bridge delegate with limit 500, absent fallback, stale fallback,
+  reject fail-closed) — 395 total (388 → 395).
+
+**Decisions:**
+- Manual-refresh-only by design (#221 gate): no mount auto-read, no
+  scheduler-notify subscription — scheduler/backoff failures surface
+  only when the user presses Refresh logs; auto-subscribe stays a
+  roadmap follow-up.
+- Dashboard owns reading, panel stays pure: the viewer never fetches,
+  writes, clears, or diagnoses — it renders observed ring contents only.
+
+**Verified:**
+- `npm test` → 62 files, 395/395 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Review #225 code CLEAR on `7582905` (agent-b independently re-ran
+  395/395; process gaps were docs + push + board, closed by this entry).
+
+**Carried nits (non-gating, review #225):**
+- List key `${timestampMs}-${category}-${message}` collides on duplicate
+  refresh lines in the same ms (React duplicate-key warning, not data
+  loss) — use index suffix or the full formatted line.
+- Bridge-read failure retains stale `logEvents`/`logSummary` alongside
+  `logError` (catch only sets error) — clear to empty or document
+  stale-plus-error intent.
+- `Promise.all` all-or-nothing: one side failing discards the other's
+  good read. Acceptable minimal, noted.
+- `Item <id>` fallback still stands (no metadata fetch in pipeline/serve).
+
 ## Sprint 20 (slice 3) — Live Top-10/history IPC over the S20 pipeline (2026-09-17)
 
 **Goal:** retire the S7/S8 stub fixtures so the renderer serves what the
