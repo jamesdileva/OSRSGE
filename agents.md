@@ -58,9 +58,23 @@ Close the slice-2 "observed, never served" divergence honestly.
 **Verified:**
 - `npm test` → 61 files, 387/387 pass.
 - `npm run typecheck` + `npm run build` + `npm run build:electron` green.
-- Awaiting agent-b review.
+- Review #216 CLEAR on `1a9f75a` + `00176cc` (agent-b independently
+  re-verified 387/387 + typecheck + build:electron, served==observed).
 
-**Carried nits (non-gating):**
+**Carried nits (non-gating, review #216):**
+- Doc drift: `refreshPipeline.ts` header L37-40 still says IPC fixtures
+  stay stub; `market.handlers.ts` L10/16 comments still say stub-feed —
+  now false after slice-3.
+- `marketStub.ts` now dead in prod but still imported by old tests
+  (filterWire, market, refreshPipeline, price-history). Mark deprecated
+  or remove to avoid two truths.
+- `buildLiveEntries` duplicates `scoreBatchSnapshots` verbatim; extract
+  shared helper to prevent served/observed drift.
+- `onBatch` shallow-copies array only (`[...snapshots]`); objects still
+  aliased. Fine while the pipeline owns the batch, note it.
+- Prototype-delegation test is weak: it calls the original repo directly
+  rather than proving the capturing wrapper forwards. Code is correct;
+  test does not disconfirm the #206 failure mode.
 - Slice-2 perf-test wall-clock + concurrent-`captured` notes still open
   (benign under the double single-flight).
 - Renderer log-viewer UI still queued (read path proven, S19 slice-3b).
