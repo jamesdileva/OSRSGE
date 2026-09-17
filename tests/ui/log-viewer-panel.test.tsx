@@ -93,4 +93,60 @@ describe('S20 slice-4 read-only log viewer (pure + dashboard wiring)', () => {
     fireEvent.click(screen.getByText('Refresh logs'));
     expect(await screen.findByText(/Logs unavailable: ipc down/)).toBeInTheDocument();
   });
+
+  it('S20 slice-5: duplicate same-ms lines render twice with no duplicate-key warning', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const dup = createLogEvent(T0, 'info', 'api-refresh', 'same line');
+      const events = [dup, createLogEvent(T0, 'info', 'api-refresh', 'same line')];
+      render(<LogViewerPanel events={events} summary={summarizeLog(events)} error={null} onRefresh={vi.fn()} />);
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+      const keyWarnings = errorSpy.mock.calls.filter((args) =>
+        args.some((a) => typeof a === 'string' && a.includes('Encountered two children with the same key')),
+      );
+      expect(keyWarnings).toHaveLength(0);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it('S20 slice-5: failed refresh clears stale reads instead of retaining them', async () => {
+    const goodEvent = createLogEvent(T0, 'info', 'api-refresh', 'good read');
+    const getRecent = vi
+      .fn()
+      .mockResolvedValueOnce({ events: [goodEvent] })
+      .mockRejectedValueOnce(new Error('ipc down'));
+    const getSummary = vi
+      .fn()
+      .mockResolvedValueOnce({ summary: summarizeLog([goodEvent]) })
+      .mockRejectedValueOnce(new Error('ipc down'));
+    window.osrsApi = {
+      app: { getVersion: vi.fn() },
+      market: { fetchTop10: vi.fn(), fetchHistory: vi.fn() },
+      logs: { getRecent, getSummary },
+    };
+    render(<Dashboard status="success" opportunities={[]} itemsAnalyzed={0} />);
+    fireEvent.click(screen.getByText('Refresh logs'));
+    expect(await screen.findByText(/good read/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Refresh logs'));
+    expect(await screen.findByText(/Logs unavailable: ipc down/)).toBeInTheDocument();
+    expect(screen.queryByText(/good read/)).toBeNull();
+  });
+
+  it('S20 slice-5: partial success preserves the good side alongside the error', async () => {
+    const goodEvent = createLogEvent(T0, 'info', 'api-refresh', 'partial good');
+    const getRecent = vi.fn().mockRejectedValue(new Error('recent down'));
+    const getSummary = vi.fn().mockResolvedValue({ summary: summarizeLog([goodEvent]) });
+    window.osrsApi = {
+      app: { getVersion: vi.fn() },
+      market: { fetchTop10: vi.fn(), fetchHistory: vi.fn() },
+      logs: { getRecent, getSummary },
+    };
+    render(<Dashboard status="success" opportunities={[]} itemsAnalyzed={0} />);
+    fireEvent.click(screen.getByText('Refresh logs'));
+    expect(await screen.findByText(/Logs unavailable: recent down/)).toBeInTheDocument();
+    // Good summary side survives; failed events side clears (no list items).
+    expect(screen.getByText(/Total events/)).toBeInTheDocument();
+    expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+  });
 });

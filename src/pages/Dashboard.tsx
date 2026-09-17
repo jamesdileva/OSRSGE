@@ -336,15 +336,35 @@ export default function Dashboard({
       setLogError(null);
       return;
     }
-    Promise.all([fetchLogRecent({ limit: MAX_LOG_ENTRIES }), fetchLogSummary()])
-      .then(([recent, summaryResponse]) => {
-        setLogEvents(recent.events);
-        setLogSummary(summaryResponse.summary);
-        setLogError(null);
-      })
-      .catch((err: unknown) => {
-        setLogError(err instanceof Error ? err.message : 'Unknown error');
-      });
+    Promise.allSettled([fetchLogRecent({ limit: MAX_LOG_ENTRIES }), fetchLogSummary()]).then(
+      ([recentResult, summaryResult]) => {
+        if (recentResult.status === 'fulfilled') {
+          setLogEvents(recentResult.value.events);
+        } else {
+          // S20 slice-5: never retain stale events alongside an error —
+          // a failed side clears to null so the panel shows error, not
+          // last-good masquerading as current.
+          setLogEvents(null);
+        }
+        if (summaryResult.status === 'fulfilled') {
+          setLogSummary(summaryResult.value.summary);
+        } else {
+          setLogSummary(null);
+        }
+        const reasons: string[] = [];
+        if (recentResult.status === 'rejected') {
+          reasons.push(
+            recentResult.reason instanceof Error ? recentResult.reason.message : 'Unknown error',
+          );
+        }
+        if (summaryResult.status === 'rejected') {
+          reasons.push(
+            summaryResult.reason instanceof Error ? summaryResult.reason.message : 'Unknown error',
+          );
+        }
+        setLogError(reasons.length > 0 ? reasons.join('; ') : null);
+      },
+    );
   };
 
   const handleCalculateFlip = (input: FlipInput): void => {

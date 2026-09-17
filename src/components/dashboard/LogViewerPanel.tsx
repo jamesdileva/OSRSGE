@@ -58,8 +58,8 @@ export default function LogViewerPanel({
       )}
       {newestFirst !== null && newestFirst.length > 0 && (
         <ul aria-label="Recent log events">
-          {newestFirst.map((event) => (
-            <li key={`${event.timestampMs}-${event.category}-${event.message}`}>{formatLogEvent(event)}</li>
+          {newestFirst.map((event, index) => (
+            <li key={`${event.timestampMs}-${event.category}-${event.message}-${index}`}>{formatLogEvent(event)}</li>
           ))}
         </ul>
       )}
