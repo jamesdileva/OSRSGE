@@ -4,6 +4,50 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (slice 2) — Async /mapping name-cache wiring in main (2026-09-17)
+
+**Goal:** close the slice-1 carried nit (main passed no resolver):
+warm one bulk `/mapping` name cache at startup and feed its sync
+resolver into both served Top-10 and observed pipeline counts, so live
+Top-10 serves real names once cached and `Item <id>` honestly before/
+on failure. Name-only; members/buyLimit stay neutral defaults.
+
+**Did:**
+- `electron/services/mappingCache.ts` (new):
+  `createMappingNameCache` (plain `Map<id, name>` + sync `resolveName` +
+  `loadFromMapping` skipping non-integer/blank entries) +
+  `refreshMappingNameCache` (one bulk `getMapping` pull, `true` on
+  success, `false` fail-open keeping previous names, never rejects).
+- `electron/main.ts`: module `mappingNames` cache; `createLiveTop10Handler`
+  now `(liveStore, Date.now, mappingNames.resolveName)`; pipeline gets
+  `rankSnapshots: (snaps, ts) => scoreBatchSnapshots(snaps, ts, resolver)`
+  so served==observed on names (no `PipelineRefreshDeps` interface
+  change); shared `priceProvider` instance; background `void` warm with
+  `startup` log (`mapping names: N cached` vs fallback notice, never
+  blocks window/scheduler/refresh).
+- Tests: `tests/market/mappingCache.test.ts` (new, 4 tests: empty→fallback,
+  blank-skip load, fail-open refresh preserving good names, served==observed
+  wiring pattern) — 406 total (402 → 406).
+
+**Decisions:**
+- Startup-warm-only by design: no per-refresh `/mapping` pull (extra bulk
+  fetch latency stays out of the 5-min refresh path); staleness (new items
+  renamed) is a documented non-gating nit — periodic re-warm is follow-up.
+- Fail-open mapping by design: names are display-only (counts are
+  name-independent, proven in slice-1), so a mapping outage must never
+  turn success into failure — fallback stays honest.
+- Name-only again: buyLimit/members enrichment deferred so filters keep
+  current semantics until real metadata is wired as a separate slice.
+
+**Verified:**
+- `npm test` → 64 files, 406/406 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Cache warms once at startup; no periodic re-warm on later refreshes.
+- Members/buyLimit still neutral defaults; blank/unknown ids still
+  `Item <id>` fallback.
+
 ## Sprint 21 (slice 1) — Sync name-injection seam for real item names (2026-09-17)
 
 **Goal:** smallest honest step toward retiring the `Item <id>` fallback:
