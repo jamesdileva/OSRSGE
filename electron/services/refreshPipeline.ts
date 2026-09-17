@@ -105,6 +105,14 @@ export interface PipelineRefreshDeps {
   logger?: PipelineLogger;
   /** Injectable scorer for tests; defaults to `scoreBatchSnapshots`. */
   rankSnapshots?: RankSnapshotsFn;
+  /**
+   * Sprint 20 slice-3: optional publish of the just-persisted batch so the
+   * live Top-10 IPC can serve it from memory with zero repository reads.
+   * Invoked after persist + scorer success; a throwing callback is
+   * swallowed (publishing must not turn success into failure). Failure
+   * paths never publish — the store keeps the last good batch.
+   */
+  onBatch?: (snapshots: readonly MarketSnapshot[], timestamp: number) => void;
 }
 
 function resolvePipelineLogger(logger: PipelineLogger): Pick<AppLogger, 'log'> | null {
@@ -123,13 +131,16 @@ export function createPipelineRefresh(deps: PipelineRefreshDeps): () => Promise<
   // interfaces: the wrapper observes the `saveSnapshots` argument the
   // pipeline already persists, so scoring needs zero extra repository
   // reads (S17 perf guard) and zero extra provider pulls.
+  // Review #206 nit: explicit delegation (not `{...deps.repository}`)
+  // so class-prototype methods survive the wrap.
   let captured: MarketSnapshot[] | null = null;
   const capturingRepository: HistoryRepository = {
-    ...deps.repository,
     saveSnapshots: async (snapshots) => {
       captured = snapshots;
       return deps.repository.saveSnapshots(snapshots);
     },
+    getItemHistory: (...args) => deps.repository.getItemHistory(...args),
+    getLatestSnapshot: (...args) => deps.repository.getLatestSnapshot(...args),
   };
   const service = new SnapshotService(deps.provider, capturingRepository);
   const rankSnapshots = deps.rankSnapshots ?? scoreBatchSnapshots;
@@ -141,6 +152,11 @@ export function createPipelineRefresh(deps: PipelineRefreshDeps): () => Promise<
       // A throwing scorer is a pipeline failure like any other: it maps
       // to `api-failure` + rethrow below (backoff preserved).
       const counts = rankSnapshots(captured ?? [], result.timestamp);
+      try {
+        deps.onBatch?.(captured ?? [], result.timestamp);
+      } catch {
+        // Publishing must not turn a successful refresh into a failure.
+      }
       try {
         await resolved?.log(
           'info',
