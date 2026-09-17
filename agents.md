@@ -4,6 +4,45 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 20 (slice 5) — Log-viewer carried-nit fixes (2026-09-17)
+
+**Goal:** close the three slice-4 carried nits from review #225 with no
+behavior change beyond honesty: duplicate-key collisions, stale-plus-error
+retention, and all-or-nothing `Promise.all`. Manual-refresh-only retained.
+
+**Did:**
+- `LogViewerPanel.tsx`: list key gains an index suffix
+  (`` `${timestampMs}-${category}-${message}-${index}` ``) — duplicate
+  refresh lines in the same ms no longer trip the React duplicate-key
+  warning; no data loss, keys stay stable per snapshot.
+- `Dashboard.tsx` `handleRefreshLogs`: `Promise.all` → `Promise.allSettled`
+  — a good side is preserved while a failed side clears to `null`
+  (never stale-plus-error); combined error message joins both rejection
+  reasons; manual `Refresh logs` button only, no auto-poll/subscribe.
+- Tests: `tests/ui/log-viewer-panel.test.tsx` extended — 398 total
+  (395 → 398): dup-key silence, stale-clear on bridge-read failure,
+  partial-preserve (good side kept alongside joined error).
+
+**Decisions:**
+- Fail-clears-to-null by design: a failed read shows error, not
+  last-good masquerading as current; a partial good side is still
+  displayed honestly alongside the joined error.
+- Manual-refresh-only by design (unchanged): scheduler/backoff failures
+  surface only on user Refresh; auto-subscribe stays roadmap follow-up.
+
+**Verified:**
+- `npm test` → 62 files, 398/398 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Review #231 CLEAR on `912ce70` (agent-b independently re-ran
+  398/398 + typecheck + build:electron).
+
+**Carried nits (non-gating):**
+- Partial error+data display is honest but keep the intent documented.
+- `Item <id>` fallback still stands (no metadata fetch in pipeline/serve).
+- Perf wall-clock guard, `captured` interleave under direct concurrent
+  refresh (benign under double single-flight), split-brain/
+  Electron-proof gates still open.
+
 ## Sprint 20 (slice 4) — Read-only renderer log viewer (2026-09-17)
 
 **Goal:** close the S19 slice-3b "read path proven, no viewer" gap with
