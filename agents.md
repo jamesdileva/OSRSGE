@@ -4,6 +4,57 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 20 (slice 2) — Scorer counts in the api-refresh log (2026-09-16)
+
+**Goal:** answer "why didn't the rankings update?" with evidence in the
+refresh log itself: log-only `rankingCandidates` / `ranked` counts
+(observed, never served) alongside the S20 slice-1 snapshot/excluded
+counts. Still no Top-10/history IPC change, no log-viewer UI.
+
+**Did:**
+- `electron/services/refreshPipeline.ts`: after persist, single O(N)
+  in-memory pass over the normalized batch — `computeMetrics`
+  single-point at batch timestamp + `rankOpportunities` BALANCED +
+  `Item <id>` fallback + `historyMinutes` undefined (S6/S14 reuse
+  verbatim). Success `info/api-refresh` message + details carry
+  `rankingCandidates` / `ranked` suffixed `(observed)`; zero repo reads
+  (counts captured via `saveSnapshots` wrapper, no extra pulls).
+  Scorer throw → `error/api-failure` + rethrow (persist preserved,
+  backoff intact); logging never throws into the pipeline either path.
+- Tests: `tests/diagnostics/refreshPipeline.test.ts` extended — 378
+  total (372 → 378): counts in message + details, Top-10/history IPC
+  fixtures asserted stub-untouched, scorer-throw → api-failure +
+  rethrow, scheduler adjacency, full-universe 4534-item sub-2s perf
+  guard.
+
+**Decisions:**
+- Log-only by design: counts are named `rankingCandidates`/`ranked`
+  (never served) and suffixed `(observed)` — the stub divergence stays
+  explicit in the doc boundary until the live Top-10 slice lands.
+- Reuse, not reinvent: single-point metrics + BALANCED rank keeps the
+  counts on the same math the future live ranking will serve; only the
+  100 GP price floor filters (undefined volume/history gates skip per
+  `isCandidate`), matching the thin-evidence claim.
+
+**Verified:**
+- `npm test` → 60 files, 378/378 pass.
+- `npm run typecheck` + `npm run build` + `npm run build:electron` green.
+- Review #206 CLEAR on `6d4f200` (mail #207, agent-b independently
+  re-verified 378/378 + typecheck + build, 2 files only, no IPC/main/
+  scheduler change).
+
+**Carried nits (non-gating, review #206):**
+- `{...deps.repository}` spread loses prototype methods at runtime
+  (both backends are classes). Harmless today — only `saveSnapshots`
+  is called, close uses the original — explicit delegation would
+  future-proof against a service change.
+- Shared `captured` can interleave under direct concurrent refresh use;
+  benign under the double single-flight, no action.
+- Perf test uses wall-clock `Date.now` with a generous bound; scale
+  guard, not a benchmark.
+- Slice-1 nits still open + renderer log-viewer UI still queued behind
+  the live Top-10/history IPC slice.
+
 ## Sprint 20 (slice 1) — Live pipeline refresh through the retained logger (2026-09-16)
 
 **Goal:** replace the honest `(stub, no pipeline)` refresh with the real
