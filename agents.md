@@ -4,6 +4,47 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Release triage (a) — Single-source metadata strictness (2026-09-18)
+
+**Goal:** close the S22 slice-2 carried nit (serve/display parity by
+mirrored duplication): extract one shared strictness source so a serve
+change cannot silently re-open a display nit.
+
+**Did:**
+- `core/market/ranking/metadataStrictness.ts` (new, pure, zero-dep):
+  `isMembersFlag` (`=== true`), `normalizeBuyLimit` (integer `> 0`),
+  `normalizeItemValue` (integer `>= 0`, `0` kept), `normalizeExamine`
+  (trimmed else `''`), `normalizeCachedMetadata` (per-field fail-open,
+  non-object → full neutrals).
+- `electron/services/rankEntries.ts` (serve via `normalizeCachedMetadata`),
+  `electron/services/mappingCache.ts` (store via `normalizeCachedMetadata`),
+  `src/components/dashboard/ItemDetailsPanel.tsx` (display via the four
+  predicates) — all three duplicated inline predicates removed, one
+  source of truth.
+- Tests +1 (432 → 433) in `tests/ui/item-details.test.tsx`: hostile shape
+  (`members=1`/`buyLimit=0`/`value=-5`) proves serve+display agree
+  (`false`/`null`/`null` + F2P + dashes).
+
+**Decisions:**
+- Single-source parity by design: serve/store/display import the same
+  predicates — no shared import yet becomes shared; future bound change
+  in one place.
+- Fail-open neutrals preserved: miss/invalid renders `Free-to-play`/`—`,
+  never an error state; panel never writes pipeline state, never fetches.
+- Type-only `mappingCache <-> rankEntries` link (no runtime cycle); core
+  helper importable from electron+renderer per existing precedent.
+
+**Verified:**
+- `npm test` → 64 files, 433/433 pass.
+- `npm run typecheck` + `npm run build` (+ `build:electron`) green.
+- Review #289 CLEAR on `dd3c9d0` (agent-b independently re-ran 433/433).
+
+**Carried nits (non-gating):**
+- (b) Both-down re-warm waits (next slice per D#1525 queue).
+- (c) Split-brain/Electron-proof gates still open.
+- (d) Members `undefined`→F2P stays the documented neutral; buyLimit
+  locale-string stays display-only.
+
 ## Sprint 22 (slice-2) — Panel-serve strictness parity (2026-09-18)
 
 **Goal:** close the S22 slice-1 carried nit (panel strictness looser
