@@ -48,6 +48,10 @@ const BREAKDOWN_ROWS = [
  * the mappingCache snapshot (zero new bulk pull). Miss/invalid stays
  * fail-open neutrals (never throws, never writes pipeline state, no
  * filter/ranking input change).
+ * Serve/display parity: the panel re-applies the rankEntries serve
+ * strictness (members === true, buyLimit integer > 0, value integer
+ * >= 0, examine trimmed non-empty) so a non-pipeline Opportunity can
+ * never display a value the serve path would null out.
  */
 export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps): JSX.Element {
   if (opportunity == null) {
@@ -93,11 +97,12 @@ export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps)
           {Math.round(opportunity.confidence * 100)}% (×{confMult.toFixed(3)})
         </dd>
         <dt>Membership</dt>
-        <dd>{opportunity.item.members ? 'Members' : 'Free-to-play'}</dd>
+        <dd>{opportunity.item.members === true ? 'Members' : 'Free-to-play'}</dd>
         <dt>Buy limit</dt>
         <dd>
           {typeof opportunity.item.buyLimit === 'number' &&
-          Number.isInteger(opportunity.item.buyLimit)
+          Number.isInteger(opportunity.item.buyLimit) &&
+          opportunity.item.buyLimit > 0
             ? opportunity.item.buyLimit.toLocaleString()
             : '—'}
         </dd>
@@ -108,7 +113,13 @@ export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps)
             : '—'}
         </dd>
         <dt>Value</dt>
-        <dd>{opportunity.item.value == null ? '—' : formatGp(opportunity.item.value)}</dd>
+        <dd>
+          {typeof opportunity.item.value === 'number' &&
+          Number.isInteger(opportunity.item.value) &&
+          opportunity.item.value >= 0
+            ? formatGp(opportunity.item.value)
+            : '—'}
+        </dd>
       </dl>
       <table aria-label="Score breakdown">
         <thead>

@@ -170,4 +170,61 @@ describe('Sprint 8 slice-1 ItemDetailsPanel (pure, props-driven)', () => {
     expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Members')).toBeInTheDocument();
   });
+
+  it('serve/display parity: truthy members, non-positive buyLimit, invalid value all render neutrals', () => {
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: 1 as never,
+            buyLimit: 0 as never,
+            examine: 'A weapon from the abyss.',
+            value: -5 as never,
+          },
+        })}
+      />,
+    );
+    const details = screen.getByRole('region', { name: 'Details for Abyssal whip' });
+    // Serve path degrades members !== true to false, buyLimit <= 0 to null,
+    // value < 0 to null — the panel must show the same fail-open neutrals.
+    expect(screen.getByText('Free-to-play')).toBeInTheDocument();
+    expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('serve/display parity: fractional value renders a dash, value 0 still renders 0 gp', () => {
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: true,
+            buyLimit: 70,
+            examine: 'A weapon from the abyss.',
+            value: 12.5 as never,
+          },
+        })}
+      />,
+    );
+    const fractional = screen.getByRole('region', { name: 'Details for Abyssal whip' });
+    expect(within(fractional).getAllByText('—').length).toBeGreaterThanOrEqual(1);
+    cleanup();
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: true,
+            buyLimit: 70,
+            examine: 'A weapon from the abyss.',
+            value: 0,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText('0 gp')).toBeInTheDocument();
+  });
 });
