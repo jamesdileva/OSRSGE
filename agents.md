@@ -4,6 +4,39 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 22 (slice-2) — Panel-serve strictness parity (2026-09-18)
+
+**Goal:** close the S22 slice-1 carried nit (panel strictness looser
+than serve, display-only, fail-open): a non-pipeline `Opportunity` must
+never display a metadata value the serve path would null out.
+
+**Did:**
+- `src/components/dashboard/ItemDetailsPanel.tsx` only (display-only,
+  no pipeline/serve/fetch/scheduler change): panel re-applies the
+  `rankEntries` serve strictness — `members === true` (truthy `1`
+  renders `Free-to-play`), `buyLimit` integer AND `> 0` (`0` renders
+  `—`), `value` integer AND `>= 0` (`-5`/fractional renders `—`, `0`
+  keeps `'0 gp'`), examine already trimmed non-empty or `—`.
+- Tests +2 (430 → 432) in `tests/ui/item-details.test.tsx`: truthy/
+  non-positive/invalid neutrals + fractional-dash vs 0-gp.
+
+**Decisions:**
+- Serve/display parity by design: shared strictness predicates keep
+  served==displayed on metadata; panel never writes pipeline state,
+  never fetches, never feeds filter/ranking inputs.
+- Fail-open neutrals preserved: miss/invalid renders `Free-to-play`/
+  `—`, never an error state.
+
+**Verified:**
+- `npm test` → 64 files, 432/432 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Both-down re-warm waits (documented in the Sprint 22 pass).
+- Split-brain/Electron-proof gates still open.
+- Members `undefined`→F2P stays the documented neutral; buyLimit
+  locale-string stays display-only.
+
 ## Sprint 22 (slice-1) — Deterministic perf guard, wall-clock retired (2026-09-18)
 
 **Goal:** close the S20 slice-2 carried nit (wall-clock `Date.now` perf
