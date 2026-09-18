@@ -434,4 +434,81 @@ describe('examine/value follow-up: cached examine/value (offline)', () => {
       scoreBatchSnapshots(snapshots, T0),
     );
   });
+
+  it('#50a: examine trims on store (padded kept trimmed, whitespace-only degrades to neutral)', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping({
+      items: [
+        {
+          id: 4151,
+          name: 'Abyssal whip',
+          examine: '  A powerful whip.  ',
+          members: true,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: 70,
+          value: 120000,
+          icon: '',
+        },
+        {
+          id: 4153,
+          name: 'Padded blank',
+          examine: '   ',
+          members: false,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: null,
+          value: null,
+          icon: '',
+        },
+      ],
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    expect(cache.resolveMetadata(4151)?.examine).toBe('A powerful whip.');
+    // Whitespace-only is stored as the neutral so the panel renders a dash, never blank.
+    expect(cache.resolveMetadata(4153)?.examine).toBe('');
+  });
+
+  it('#50a: value 0 is a real value (kept), distinct from the null miss neutral', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping({
+      items: [
+        {
+          id: 4151,
+          name: 'Zero value',
+          examine: '',
+          members: false,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: null,
+          value: 0,
+          icon: '',
+        },
+      ],
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    expect(cache.resolveMetadata(4151)?.value).toBe(0);
+    const { snapshots } = batch();
+    const entries = buildRankEntries(snapshots, T0, cache.resolveName, cache.resolveMetadata);
+    expect(entries.find((e) => e.item.id === 4151)?.item.value).toBe(0);
+    // Empty cache still serves the null neutral for the same id.
+    const empty = createMappingNameCache();
+    const miss = buildRankEntries(snapshots, T0, empty.resolveName, empty.resolveMetadata);
+    expect(miss.find((e) => e.item.id === 4151)?.item.value).toBeNull();
+  });
+
+  it('#50a: partial metadata shapes degrade per field (strict serve, no throw)', () => {
+    const { snapshots } = batch();
+    const partial = () =>
+      ({ members: undefined, buyLimit: '70', examine: '   ', value: 1.5 }) as never;
+    const entries = buildRankEntries(snapshots, T0, undefined, partial);
+    for (const e of entries) {
+      expect(e.item.members).toBe(false);
+      expect(e.item.buyLimit).toBeNull();
+      expect(e.item.examine).toBe('');
+      expect(e.item.value).toBeNull();
+    }
+  });
 });

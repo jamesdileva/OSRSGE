@@ -129,4 +129,45 @@ describe('Sprint 8 slice-1 ItemDetailsPanel (pure, props-driven)', () => {
     // Buy limit + examine + value all degrade to the em-dash neutral.
     expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(3);
   });
+
+  it('#50a: whitespace examine renders a dash, value 0 renders 0 gp (distinct from null)', () => {
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: false,
+            buyLimit: 70,
+            examine: '   ',
+            value: 0,
+          },
+        })}
+      />,
+    );
+    const details = screen.getByRole('region', { name: 'Details for Abyssal whip' });
+    // Whitespace-only examine degrades to the dash neutral, never a blank line.
+    expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('0 gp')).toBeInTheDocument();
+  });
+
+  it('#50a: non-number buyLimit renders a dash (strict display guard, no throw)', () => {
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: true,
+            buyLimit: '70' as never,
+            examine: 'A weapon from the abyss.',
+            value: 120001,
+          },
+        })}
+      />,
+    );
+    const details = screen.getByRole('region', { name: 'Details for Abyssal whip' });
+    expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('Members')).toBeInTheDocument();
+  });
 });

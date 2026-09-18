@@ -96,10 +96,17 @@ export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps)
         <dd>{opportunity.item.members ? 'Members' : 'Free-to-play'}</dd>
         <dt>Buy limit</dt>
         <dd>
-          {opportunity.item.buyLimit == null ? '—' : opportunity.item.buyLimit.toLocaleString()}
+          {typeof opportunity.item.buyLimit === 'number' &&
+          Number.isInteger(opportunity.item.buyLimit)
+            ? opportunity.item.buyLimit.toLocaleString()
+            : '—'}
         </dd>
         <dt>Examine</dt>
-        <dd>{opportunity.item.examine ? opportunity.item.examine : '—'}</dd>
+        <dd>
+          {typeof opportunity.item.examine === 'string' && opportunity.item.examine.trim() !== ''
+            ? opportunity.item.examine.trim()
+            : '—'}
+        </dd>
         <dt>Value</dt>
         <dd>{opportunity.item.value == null ? '—' : formatGp(opportunity.item.value)}</dd>
       </dl>

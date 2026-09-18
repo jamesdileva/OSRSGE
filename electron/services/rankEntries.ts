@@ -39,6 +39,9 @@ import type { RankEntry } from '../../core/market/ranking/scorer.js';
  * (`examine: ''`, `value: null`) fail-open. Display-only: no filter or
  * ranking input reads examine/value; the renderer surfaces them in
  * ItemDetailsPanel (members/buyLimit/examine/value, miss → neutrals).
+ * #50a hardening: serve path validates each metadata field (partial
+ * shapes degrade per field; examine trimmed) so a non-cache resolver
+ * can never smuggle an invalid display value through.
  */
 export type ItemNameResolver = (itemId: number) => string | undefined;
 /** Cached `/mapping` members/buyLimit/examine/value only — never fetched in this path. */
@@ -62,16 +65,34 @@ export function buildRankEntries(
       continue;
     }
     const resolved = resolveName?.(snapshot.itemId)?.trim();
-    const meta = resolveMetadata?.(snapshot.itemId);
+    const raw = resolveMetadata?.(snapshot.itemId);
+    // #50a strictness: a custom resolver may return a partial shape —
+    // validate per field so miss/invalid stays the fail-open neutrals.
+    const rawRecord = (typeof raw === 'object' && raw !== null ? raw : undefined) as
+      | Partial<CachedItemMetadata>
+      | undefined;
+    const buyLimit =
+      typeof rawRecord?.buyLimit === 'number' &&
+      Number.isInteger(rawRecord.buyLimit) &&
+      rawRecord.buyLimit > 0
+        ? rawRecord.buyLimit
+        : null;
+    const examine = typeof rawRecord?.examine === 'string' ? rawRecord.examine.trim() : '';
+    const value =
+      typeof rawRecord?.value === 'number' &&
+      Number.isInteger(rawRecord.value) &&
+      rawRecord.value >= 0
+        ? rawRecord.value
+        : null;
     entries.push({
       metrics,
       item: {
         id: snapshot.itemId,
         name: resolved ? resolved : `Item ${snapshot.itemId}`,
-        members: meta?.members ?? false,
-        buyLimit: meta?.buyLimit ?? null,
-        examine: meta?.examine ?? '',
-        value: meta?.value ?? null,
+        members: rawRecord?.members === true,
+        buyLimit,
+        examine,
+        value,
       },
       observationCount: 1,
       stalenessMinutes: 0,

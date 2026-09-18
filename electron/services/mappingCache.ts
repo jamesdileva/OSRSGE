@@ -3,6 +3,7 @@ import type {
   MarketDataProvider,
 } from '../../core/market/providers/MarketDataProvider.js';
 import type { ItemMetadataResolver } from './rankEntries.js';
+import type { CachedItemMetadata } from './rankEntries.js';
 import type { ItemNameResolver } from './rankEntries.js';
 
 /**
@@ -51,7 +52,7 @@ export interface MappingNameCache {
 
 export function createMappingNameCache(): MappingNameCache {
   const names = new Map<number, string>();
-  const metas = new Map<number, { members: boolean; buyLimit: number | null; examine: string; value: number | null }>();
+  const metas = new Map<number, CachedItemMetadata>();
   const resolveName: ItemNameResolver = (itemId: number) => names.get(itemId);
   const resolveMetadata: ItemMetadataResolver = (itemId: number) => metas.get(itemId);
   return {
@@ -64,7 +65,7 @@ export function createMappingNameCache(): MappingNameCache {
         throw new TypeError('Invalid mapping snapshot: items must be an array');
       }
       const nextNames = new Map<number, string>();
-      const nextMetas = new Map<number, { members: boolean; buyLimit: number | null; examine: string; value: number | null }>();
+      const nextMetas = new Map<number, CachedItemMetadata>();
       for (const item of snapshot.items) {
         if (
           typeof item?.id === 'number' &&
@@ -83,7 +84,7 @@ export function createMappingNameCache(): MappingNameCache {
               item.buyLimit > 0
                 ? item.buyLimit
                 : null,
-            examine: typeof item.examine === 'string' ? item.examine : '',
+            examine: typeof item.examine === 'string' ? item.examine.trim() : '',
             value:
               typeof item.value === 'number' &&
               Number.isInteger(item.value) &&
@@ -93,6 +94,8 @@ export function createMappingNameCache(): MappingNameCache {
           });
         }
       }
+      // #50a: value 0 is a real GE value (kept), null stays the miss
+      // neutral — the >= 0 bound above is explicit, not accidental.
       names.clear();
       for (const [id, name] of nextNames) {
         names.set(id, name);
