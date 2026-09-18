@@ -21,8 +21,11 @@ never display a metadata value the serve path would null out.
   non-positive/invalid neutrals + fractional-dash vs 0-gp.
 
 **Decisions:**
-- Serve/display parity by design: shared strictness predicates keep
-  served==displayed on metadata; panel never writes pipeline state,
+- Serve/display parity by design: mirrored strictness predicates keep
+  served==displayed on metadata (duplicated inline in `rankEntries.ts`
+  + `ItemDetailsPanel.tsx`, no shared import yet — a future slice
+  should extract a shared helper so a serve change cannot silently
+  re-open this nit); panel never writes pipeline state,
   never fetches, never feeds filter/ranking inputs.
 - Fail-open neutrals preserved: miss/invalid renders `Free-to-play`/
   `—`, never an error state.

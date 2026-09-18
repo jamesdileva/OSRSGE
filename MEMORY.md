@@ -1,7 +1,7 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: Panel-serve parity DONE 63e4547 (432/432 + typecheck + build green). ItemDetailsPanel now members===true, buyLimit int>0, value int>=0, examine trimmed — matches rankEntries serve.
-Next: AGENTS.md worklog entry for slice-2, then Sprint 22 triage / release-engineering slice; board empty, needs refill.
+Current goal: S22 slice-2 DONE + worklog wording fixed (mirrored strictness, 432 green). 3-commit train + this fix ready to push.
+Next: push train, build win-unpack via new pack script, refill board with release-engineering triage slice.
 Key learnings: serve-from-memory (no re-read); last-good on failure;
 lazy backend resolution per-request; stub retired honestly via version
 tag change; quality non-overlap — ≤0/non-finite stays normalizer

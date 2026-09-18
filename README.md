@@ -6,6 +6,9 @@ confidence. No account, no backend, no trading automation.
 
 See `architecture.md`, `implementation-guide.md`, and `sprint-roadmap.md` for the
 full design. See `agents.md` for the sprint worklog.
+`Sprint 19+` (logger, live pipeline, mapping/metadata, perf guards) are
+continuations past the baseline `sprint-roadmap.md` (ends Sprint 18) and are
+logged newest-first in `agents.md`.
 
 ## Prerequisites
 
@@ -21,6 +24,7 @@ npm run dev:electron  # full desktop shell (Vite + Electron + IPC)
 npm test           # Vitest suite (required green before every commit)
 npm run typecheck  # strict typecheck (required clean before every commit)
 npm run build      # typecheck + production renderer build
+npm run pack:win-unpack  # rebuildable Windows unpacked build in release/win-unpacked (gitignored, rebuild after each release change)
 ```
 
 ## Project structure

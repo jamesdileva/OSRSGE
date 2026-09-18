@@ -10,6 +10,7 @@
     "dev:electron": "concurrently -k \"vite --port 5173 --strictPort\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on http://localhost:5173 && electron dist-electron/electron/main.js\"",
     "build": "tsc -b && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
+    "pack:win-unpack": "npm run build && npm run build:electron && electron-builder --win --dir",
     "check:market": "vite-node scripts/check-market.ts",
     "check:analytics": "vite-node scripts/check-analytics.ts",
     "check:ablation": "vite-node scripts/check-ablation.ts",
