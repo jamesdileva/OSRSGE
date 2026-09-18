@@ -4,6 +4,50 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 22 (slice-1) — Deterministic perf guard, wall-clock retired (2026-09-18)
+
+**Goal:** close the S20 slice-2 carried nit (wall-clock `Date.now` perf
+guard flakes on shared CI): prove the S17 property — the ~8 s full-week
+`getItemHistory` scan stays out of the refresh path — deterministically,
+by construction rather than stopwatch.
+
+**Did:**
+- `tests/diagnostics/refreshPipeline.test.ts` only (test-only, 37+/6-,
+  no prod/fetch/scheduler change): renamed the full-universe guard to
+  `scores a full-universe batch in a single bounded pass with zero
+  repository reads (deterministic S17 perf guard)`. Keeps the direct
+  full-universe correctness asserts (4534 snapshots → 4534 candidates,
+  ranked > 0), drops the `elapsed < 2000` wall-clock bound, adds a
+  structural proof through the real `createPipelineRefresh` path with a
+  stub provider/repository: exactly 1 scorer pass (`rankCalls == 1`)
+  over the full persisted batch (`rankedArgLength == 4534`) + 0
+  `getItemHistory` reads + 0 `getLatestSnapshot` reads.
+- No prod blast radius: diff touches one test file; pipeline, scorer,
+  repository, scheduler, IPC untouched.
+
+**Decisions:**
+- Determinism over stopwatch: wall-clock bounds flake on shared CI
+  hardware; call-count/zero-read guards fail if and only if a per-item
+  or full-week history scan re-enters the refresh path.
+- O(N) single-pass-ness still rests on `scoreBatchSnapshots` code
+  inspection (one in-memory pass, zero repo reads); the guard is a
+  regression tripwire on passes/reads, not a proof of inner complexity
+  — stated explicitly per review #275.
+
+**Verified:**
+- Targeted `tests/diagnostics/refreshPipeline.test.ts` → 13/13 pass.
+- `npm test` → 64 files, 430/430 pass.
+- `npm run typecheck` + `npm run build` green.
+- Review #275 CLEAR on `8544c85` (agent-b independently re-ran 13/13;
+  test-only, no prod blast radius).
+
+**Carried nits (non-gating):**
+- Panel strictness looser than serve (display-only, fail-open).
+- Both-down re-warm waits (documented in the Sprint 22 pass).
+- Split-brain/Electron-proof gates still open.
+- Members `undefined`→F2P stays the documented neutral; buyLimit
+  locale-string stays display-only.
+
 ## Sprint 21 (#50b) — Mapping fast-retry on the count gate (2026-09-18)
 
 **Goal:** close the #50a carried nit per review #268 split (fast-retry
