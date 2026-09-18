@@ -97,7 +97,7 @@ export function createMappingNameCache(): MappingNameCache {
 
 /**
  * One bulk `/mapping` pull into the cache. Returns `true` on success,
- * `false` on any provider/validation failure (previous names kept —
+ * `false` on any provider/validation failure (previous names/metadata kept —
  * the swap in `loadFromMapping` only runs after validation, so a
  * malformed-but-resolving snapshot can never wipe the cache).
  * Never rejects.

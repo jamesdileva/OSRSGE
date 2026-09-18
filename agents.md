@@ -4,6 +4,51 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (enrichment #47) — Cached members/buyLimit over the 288 gate (2026-09-18)
+
+**Goal:** close gated build slice (#248/#249/#250): serve real members/
+buyLimit from the already-cached `/mapping` map with zero new bulk pull,
+fail-open neutral defaults, explicit payload + filter docs.
+
+**Did:**
+- `electron/services/mappingCache.ts`: same atomic snapshot now stores
+  `{name, members, buyLimit}` per id (blank-name skip preserved);
+  `resolveMetadata` sync lookup over the cached map only; invalid
+  members/buyLimit degrade per-entry to neutral (`false`/`null`) without
+  dropping the name; no fetch-path change (startup warm + 288 count gate
+  untouched).
+- `electron/services/rankEntries.ts`: new `CachedItemMetadata` +
+  `ItemMetadataResolver` seam; `buildRankEntries` optional 4th param —
+  miss/`undefined` keeps pre-enrichment `members: false, buyLimit: null`.
+- `electron/services/liveMarket.ts` + `refreshPipeline.ts` + `main.ts`:
+  optional-appended `resolveMetadata` threading; main passes
+  `mappingNames.resolveMetadata` into both served Top-10 and observed
+  `rankSnapshots` so served==observed on metadata too.
+- Tests +6 (411 → 417): cached load, fail-open miss shape, invalid
+  per-entry degrade, explicit served-payload change + counts equality
+  (price-only candidacy), membership-meaningful-only-with-metadata
+  (neutral `members`→empty / `f2p`→all preserved on miss), handler
+  forwarding in `itemNames.test.ts`.
+
+**Decisions:**
+- No new bulk pull by design: metadata rides the existing snapshot +
+  288 gate; staleness bound (~24 h healthy, extending under outage)
+  now covers metadata — stale members flag is documented filter-input
+  staleness (display-only), never a pipeline failure.
+- Fail-open neutral defaults by design: mapping miss/outage keeps
+  refresh + ranking green; membership filter meaningful only when
+  present — explicit doc, no silent shift.
+- Fast-retry stays separate (carried); itemNames/mappingCache + full
+  suite green per gate (6).
+
+**Verified:**
+- `npm test` → 64 files, 417/417 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Startup-warm failure still waits a full interval (no fast-retry).
+- Examine/value stay empty/null (members/buyLimit scope only).
+
 ## Sprint 21 (re-warm slice) — Header fix + count-gated periodic re-warm (2026-09-17)
 
 **Goal:** close mail #244 scope: fix the stale `Never throws` header nit
