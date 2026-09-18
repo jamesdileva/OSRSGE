@@ -1,8 +1,7 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: S20 slice-4 DONE (7582905) + worklog 3c19882 landed + pushed, 395/395 green, review #225 CLEAR.
-Read-only manual-refresh log viewer (LogViewerPanel pure, Dashboard owns fetchLogRecent/fetchLogSummary, MAX 500); pipeline/Top-10 untouched.
-Next: S20 slice-5 carried nits (list-key collision, stale-plus-error, Promise.all all-or-nothing) or S21 release polish; await board refill.
+Current goal: #50b DONE (de44774+08ac3d0), 430/430 + typecheck + build green. Fast-retry: retry gate 12 on empty-cache/last-failed, min-capped, reset-on-attempt. Main unchanged.
+Next: Sprint 22 triage — wall-clock perf guard determinism vs release-engineering slice; board empty after #50, needs refill.
 Key learnings: serve-from-memory (no re-read); last-good on failure;
 lazy backend resolution per-request; stub retired honestly via version
 tag change; quality non-overlap — ≤0/non-finite stays normalizer
