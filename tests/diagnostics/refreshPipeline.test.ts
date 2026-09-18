@@ -316,4 +316,47 @@ describe('S20 slice-2 observed scorer counts in the pipeline refresh (offline)',
     await createPipelineRefresh({ provider, repository, logger: null })();
     expect(saved).toHaveLength(1);
   });
+
+  it('both-down (b): onFailure fires on failure and never masks the error', async () => {
+    const { repository } = stubRepository();
+    const seen: unknown[] = [];
+    const refresh = createPipelineRefresh({
+      provider: stubProvider(new Error('net down')),
+      repository,
+      logger: null,
+      onFailure: (error) => {
+        seen.push(error);
+      },
+    });
+    await expect(refresh()).rejects.toThrow('net down');
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBeInstanceOf(Error);
+  });
+
+  it('both-down (b): onFailure not called on success; throwing onFailure swallowed', async () => {
+    const okProvider = stubProvider(
+      makeLatest({ 4151: { high: 1000, highTime: null, low: 900, lowTime: null } }),
+    );
+    const { repository } = stubRepository();
+    let calls = 0;
+    await createPipelineRefresh({
+      provider: okProvider,
+      repository,
+      logger: null,
+      onFailure: () => {
+        calls += 1;
+      },
+    })();
+    expect(calls).toBe(0);
+
+    const failing = createPipelineRefresh({
+      provider: stubProvider(new Error('net down')),
+      repository,
+      logger: null,
+      onFailure: () => {
+        throw new Error('observer bug');
+      },
+    });
+    await expect(failing()).rejects.toThrow('net down');
+  });
 });

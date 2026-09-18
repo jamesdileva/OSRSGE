@@ -105,6 +105,14 @@ export interface PipelineRefreshDeps {
    * `liveStore.set` follows this pattern.
    */
   onBatch?: (snapshots: readonly MarketSnapshot[], timestamp: number) => void;
+  /**
+   * Both-down re-warm (b): optional failure signal so the mapping re-warm
+   * gate ticks on settled refreshes, not just successes. Invoked with the
+   * pipeline error on any failure path before rethrow; a throwing callback
+   * is swallowed. Main wires the same rewarmIfDue tick here as in onBatch
+   * so an empty cache recovers while price refreshes keep failing.
+   */
+  onFailure?: (error: unknown) => void;
 }
 
 function resolvePipelineLogger(logger: PipelineLogger): Pick<AppLogger, 'log'> | null {
@@ -186,6 +194,11 @@ export function createPipelineRefresh(deps: PipelineRefreshDeps): () => Promise<
         // Logging must not turn a successful refresh into a failure.
       }
     } catch (error) {
+      try {
+        deps.onFailure?.(error);
+      } catch {
+        // Observing a failure must not mask the original error.
+      }
       try {
         await resolved?.log(
           'error',

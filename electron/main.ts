@@ -148,6 +148,21 @@ void app.whenReady().then(async () => {
   // S21 slice-2 warm: one bulk /mapping pull (best-effort, never blocks
   // startup or refresh — failure keeps the honest `Item <id>` fallback).
   const priceProvider = new WikiPriceProvider();
+  // Both-down (b): single shared re-warm tick so onBatch + onFailure can
+  // never drift (one background fetch shape, never throws into refresh).
+  const tickMappingRewarm = (): Promise<void> =>
+    mappingRewarm.rewarmIfDue(mappingNames, priceProvider).then((outcome) => {
+      if (outcome === 'skipped') {
+        return;
+      }
+      void getAppLogger()?.log(
+        outcome === 'ok' ? 'info' : 'warn',
+        'api-refresh',
+        outcome === 'ok'
+          ? `mapping names re-warmed: ${mappingNames.size()} cached`
+          : 'mapping re-warm failed, keeping previous names',
+      )?.catch(() => undefined);
+    });
   void refreshMappingNameCache(mappingNames, priceProvider).then((ok) => {
     void getAppLogger()
       ?.log(
@@ -182,18 +197,12 @@ void app.whenReady().then(async () => {
           // Count-gated re-warm: skipped (no fetch) until due; when due,
           // one best-effort background pull that never throws into the
           // refresh. Fail-open keeps previous names on failure.
-          void mappingRewarm.rewarmIfDue(mappingNames, priceProvider).then((outcome) => {
-            if (outcome === 'skipped') {
-              return undefined;
-            }
-            return getAppLogger()?.log(
-              outcome === 'ok' ? 'info' : 'warn',
-              'api-refresh',
-              outcome === 'ok'
-                ? `mapping names re-warmed: ${mappingNames.size()} cached`
-                : 'mapping re-warm failed, keeping previous names',
-            )?.catch(() => undefined);
-          });
+          // Both-down (b): the same tick runs on onFailure below so an
+          // empty cache recovers while price refreshes keep failing.
+          void tickMappingRewarm();
+        },
+        onFailure: () => {
+          void tickMappingRewarm();
         },
       }),
     ),

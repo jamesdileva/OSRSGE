@@ -171,12 +171,19 @@ export type MappingRewarmOutcome = 'skipped' | 'ok' | 'failed';
 export interface MappingRewarmTracker {
   readonly successesSinceWarm: number;
   /**
-   * Call once per successful pipeline refresh. Skips (no fetch) until
+   * Call once per settled pipeline refresh — success via `onBatch` AND
+   * failure via `onFailure` (both-down fix (b)). Skips (no fetch) until
    * the gate is due; when due, performs one best-effort
    * `refreshMappingNameCache` and resets the counter on the *attempt*
    * (success or failure) so a sustained mapping outage costs at most
    * one bulk fetch per interval instead of one per refresh. Failure
    * keeps previous names via the atomic swap (fail-open). Never rejects.
+   *
+   * Why failures tick too: the gate used to advance on successes only, so
+   * an empty cache (startup warm failed) combined with failing price
+   * refreshes never retried mapping — both-down waited forever. Counting
+   * settled refreshes bounds the cost identically (reset-on-attempt) while
+   * letting mapping recover independently of price health.
    */
   rewarmIfDue(
     cache: MappingNameCache,

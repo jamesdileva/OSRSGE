@@ -571,4 +571,53 @@ describe('#50b fast-retry: empty-cache + failed-attempt short gate (offline)', (
     expect(await tracker.rewarmIfDue(cache, flapping)).toBe('skipped');
     expect(calls).toBe(afterFirstAttempt + 1);
   });
+
+  it('both-down (b): settled ticks (success + failure) advance the empty-cache short gate', async () => {
+    const { createPipelineRefresh } = await import(
+      '../../electron/services/refreshPipeline.js'
+    );
+    const cache = createMappingNameCache();
+    // Empty cache (startup warm failed) + short gate of 3 settled ticks.
+    const tracker = createMappingRewarmTracker(288, 3);
+    let mappingCalls = 0;
+    const mappingProvider = {
+      getMapping: async () => {
+        mappingCalls += 1;
+        throw new Error('mapping down');
+      },
+    };
+    // Simulate main wiring: onBatch AND onFailure both tick rewarmIfDue.
+    // Price refreshes keep failing, but the settled ticks still reach the
+    // short gate on the 3rd settled refresh — mapping recovery no longer
+    // waits for a price success.
+    const priceFailing = {
+      getLatest: async (): Promise<never> => {
+        throw new Error('price down');
+      },
+    };
+    const noStore = {
+      saveSnapshots: async () => undefined,
+      getItemHistory: async () => [],
+      getLatestSnapshot: async () => null,
+    };
+    const tick = (): Promise<string> => tracker.rewarmIfDue(cache, mappingProvider);
+    const refresh = createPipelineRefresh({
+      provider: priceFailing,
+      repository: noStore,
+      logger: null,
+      onFailure: () => {
+        void tick();
+      },
+    });
+    // Two failed price refreshes: each ticks once (2 skips, no fetch yet
+    // beyond the gate — the first two ticks skip).
+    await expect(refresh()).rejects.toThrow('price down');
+    await expect(refresh()).rejects.toThrow('price down');
+    expect(tracker.successesSinceWarm).toBe(2);
+    expect(mappingCalls).toBe(0);
+    // Third settled refresh reaches the short gate via the same tick.
+    expect(await tick()).toBe('failed');
+    expect(mappingCalls).toBe(1);
+    expect(cache.size()).toBe(0);
+  });
 });
