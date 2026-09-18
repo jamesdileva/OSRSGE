@@ -37,9 +37,8 @@ import type { RankEntry } from '../../core/market/ranking/scorer.js';
  * + `value` via `resolveMetadata` — still NO new bulk pull. On
  * miss/undefined the payload keeps the pre-enrichment neutrals
  * (`examine: ''`, `value: null`) fail-open. Display-only: no filter or
- * ranking input reads examine/value, and the renderer does not surface
- * them yet (ItemDetailsPanel follow-up) — so this changes the served
- * payload only.
+ * ranking input reads examine/value; the renderer surfaces them in
+ * ItemDetailsPanel (members/buyLimit/examine/value, miss → neutrals).
  */
 export type ItemNameResolver = (itemId: number) => string | undefined;
 /** Cached `/mapping` members/buyLimit/examine/value only — never fetched in this path. */

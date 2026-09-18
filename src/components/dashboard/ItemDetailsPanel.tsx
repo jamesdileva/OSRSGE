@@ -42,6 +42,12 @@ const BREAKDOWN_ROWS = [
  * (roadmap §10, guide §32). Zero IPC, zero chart.js, zero history fetch —
  * renders one Opportunity the Dashboard selects via row-click. Chart +
  * getItemHistory arrive in slice-2.
+ *
+ * S21 #48: display-only cached metadata (members/buyLimit/examine/value)
+ * surfaced from `opportunity.item` — already served by the pipeline via
+ * the mappingCache snapshot (zero new bulk pull). Miss/invalid stays
+ * fail-open neutrals (never throws, never writes pipeline state, no
+ * filter/ranking input change).
  */
 export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps): JSX.Element {
   if (opportunity == null) {
@@ -86,6 +92,16 @@ export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps)
         <dd>
           {Math.round(opportunity.confidence * 100)}% (×{confMult.toFixed(3)})
         </dd>
+        <dt>Membership</dt>
+        <dd>{opportunity.item.members ? 'Members' : 'Free-to-play'}</dd>
+        <dt>Buy limit</dt>
+        <dd>
+          {opportunity.item.buyLimit == null ? '—' : opportunity.item.buyLimit.toLocaleString()}
+        </dd>
+        <dt>Examine</dt>
+        <dd>{opportunity.item.examine ? opportunity.item.examine : '—'}</dd>
+        <dt>Value</dt>
+        <dd>{opportunity.item.value == null ? '—' : formatGp(opportunity.item.value)}</dd>
       </dl>
       <table aria-label="Score breakdown">
         <thead>

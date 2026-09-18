@@ -100,4 +100,33 @@ describe('Sprint 8 slice-1 ItemDetailsPanel (pure, props-driven)', () => {
     );
     expect(screen.getByRole('region', { name: 'Details for Item 1' })).toBeInTheDocument();
   });
+
+  it('S21 #48: surfaces cached metadata display-only when present', () => {
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: true,
+            buyLimit: 70,
+            examine: 'A weapon from the abyss.',
+            value: 120001,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText('Members')).toBeInTheDocument();
+    expect(screen.getByText('70')).toBeInTheDocument();
+    expect(screen.getByText('A weapon from the abyss.')).toBeInTheDocument();
+    expect(screen.getByText('120,001 gp')).toBeInTheDocument();
+  });
+
+  it('S21 #48: miss stays fail-open neutrals (F2P / em-dash, no throw)', () => {
+    render(<ItemDetailsPanel opportunity={makeOpportunity(999999, 55)} />);
+    expect(screen.getByText('Free-to-play')).toBeInTheDocument();
+    const details = screen.getByRole('region', { name: 'Details for Item 999999' });
+    // Buy limit + examine + value all degrade to the em-dash neutral.
+    expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(3);
+  });
 });
