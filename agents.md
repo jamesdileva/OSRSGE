@@ -4,6 +4,56 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Release triage (b) — Both-down mapping re-warm on settled refreshes (2026-09-18)
+
+**Goal:** close the carried both-down nit (startup warm failed +
+price refreshes keep failing → empty mapping cache never retried):
+the re-warm gate ticks on settled refreshes, not successes only, so
+mapping recovers independently of price health with identical cost
+bounds.
+
+**Did:**
+- `electron/services/refreshPipeline.ts`: new optional
+  `onFailure(error)` signal — invoked with the pipeline error on any
+  failure path before rethrow; a throwing callback is swallowed so
+  observing a failure never masks the original error (backoff intact).
+- `electron/main.ts`: single shared `tickMappingRewarm`
+  (`Promise<void>`, void-logged) wired into both `onBatch` (success)
+  and `onFailure` (failure) — one background fetch/log shape that
+  never throws into refresh (`skipped` silent, `ok` info with cached
+  count, `failed` warn keeping previous names).
+- `electron/services/mappingCache.ts`: `rewarmIfDue` doc now
+  settled-refresh semantics + why-failures-tick-too rationale; gate
+  bounds unchanged (reset-on-attempt, short retry vs 288 full gate).
+- Tests +3 (433 → 436): `onFailure` fires once with the error and
+  never masks it; not called on success + throwing observer swallowed;
+  settled ticks advance the empty-cache short gate to a 3rd-tick fetch
+  while price refreshes keep failing (`tests/diagnostics/`
+  `refreshPipeline.test.ts`, `tests/market/mappingCache.test.ts`).
+
+**Decisions:**
+- Settled ticks by design: reset-on-attempt bounds outage cost
+  identically (≤1 fetch per interval) while an empty cache recovers
+  without waiting for a price success.
+- Shared tick by design: `onBatch` + `onFailure` cannot drift — one
+  fetch shape, one log shape.
+- Fail-open preserved: mapping failure keeps previous names (empty →
+  honest `Item <id>` fallback); price failure still rethrows so the
+  scheduler streak/backoff contract holds.
+- Tick must void-log (`Promise<void>`, never `Promise<event>`): the
+  log promise is `void`-ed with `.catch` per precedent, never returned.
+
+**Verified:**
+- `npm test` → 64 files, 436/436 pass.
+- `npm run typecheck` + `npm run build` (+ `build:electron`) green.
+- Awaiting agent-b review (no number yet).
+
+**Carried nits (non-gating):**
+- (c) Split-brain/Electron-proof gates still open.
+- (d) Members `undefined`→F2P stays the documented neutral; buyLimit
+  locale-string stays display-only.
+- (a) closed: single-source strictness landed, review #289 CLEAR.
+
 ## Release triage (a) — Single-source metadata strictness (2026-09-18)
 
 **Goal:** close the S22 slice-2 carried nit (serve/display parity by
