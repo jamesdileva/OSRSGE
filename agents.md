@@ -4,6 +4,43 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (#48) — ItemDetailsPanel surfacing, display-only cached metadata (2026-09-18)
+
+**Goal:** close #48/#49: renderer surfaces the already-cached
+members/buyLimit/examine/value in ItemDetailsPanel, display-only with
+zero new bulk pull, fail-open neutrals, no filter/ranking input change.
+
+**Did:**
+- `src/components/dashboard/ItemDetailsPanel.tsx`: 4 display-only rows
+  over `opportunity.item` (already served by the pipeline via the
+  mappingCache 288-gated snapshot) — Membership (`Members`/`Free-to-play`),
+  Buy limit (`toLocaleString` or `—` on null), Examine (text or `—` on
+  `''`), Value (`formatGp` or `—` on null). Pure props-driven, no IPC/
+  fetch/write, never throws on miss.
+- `electron/services/rankEntries.ts`: doc updated — renderer now surfaces
+  the served metadata (was "follow-up"); math untouched.
+- Tests +2 (421 → 423): present-metadata surfacing (Members/70/examine/
+  `120,001 gp`) + miss fail-open neutrals (F2P + ≥3 `—`) in
+  `tests/ui/item-details.test.tsx`.
+
+**Decisions:**
+- Display-only by design: panel reads `opportunity.item` only — served==
+  observed by inheritance (no new resolver thread, no pipeline change).
+- Fail-open neutrals by design: miss/invalid renders `Free-to-play`/`—`,
+  never an error state; no filter/ranking input reads the new rows.
+- Membership wording `Members`/`Free-to-play` matches the FilterBar
+  vocabulary (`members`/`f2p`/`all`).
+
+**Verified:**
+- `npm test` → 64 files, 423/423 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Startup-warm failure still waits a full interval (no fast-retry).
+- Wall-clock perf guard, split-brain/Electron-proof gates still open.
+- Review #260 nits still open (CachedItemMetadata required-fields
+  strictness, inline meta-type drift, examine untrimmed, value 0-vs-null).
+
 ## Sprint 21 (examine/value follow-up) — Cached examine/value over the 288 gate (2026-09-18)
 
 **Goal:** close the carried `examine/value stay empty/null` nit from the
