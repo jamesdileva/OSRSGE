@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeLatest } from '../../core/market/normalization/normalizer.js';
 import type { MappingSnapshot } from '../../core/market/providers/MarketDataProvider.js';
+import { applyFilters } from '../../core/market/ranking/filters.js';
+import { buildRankEntries } from '../../electron/services/rankEntries.js';
 import { rankBatchToTop10 } from '../../electron/services/liveMarket.js';
 import {
   createMappingNameCache,
@@ -210,5 +212,99 @@ describe('S21 slice-2 mapping name cache (offline)', () => {
     const served = rankBatchToTop10(snapshots, T0, undefined, cache.resolveName);
     expect(served.opportunities[0]?.item.name).toBe('Abyssal whip');
     expect(counts).toEqual(scoreBatchSnapshots(snapshots, T0));
+  });
+});
+
+describe('S21 enrichment #47: cached members/buyLimit (offline)', () => {
+  it('loads members/buyLimit from the same already-cached snapshot (no new pull)', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(mapping());
+    expect(cache.resolveMetadata(4151)).toEqual({ members: true, buyLimit: 70 });
+    // Blank-name entries are skipped entirely → no metadata either.
+    expect(cache.resolveMetadata(4152)).toBeUndefined();
+  });
+
+  it('fail-open neutral defaults on miss keep the pre-enrichment payload shape', () => {
+    const cache = createMappingNameCache();
+    const { snapshots } = batch();
+    // Empty cache: miss → neutral defaults (old behavior preserved).
+    const entries = buildRankEntries(snapshots, T0, cache.resolveName, cache.resolveMetadata);
+    for (const e of entries) {
+      expect(e.item.members).toBe(false);
+      expect(e.item.buyLimit).toBeNull();
+    }
+    expect(cache.resolveMetadata(999999)).toBeUndefined();
+  });
+
+  it('invalid members/buyLimit degrade per-entry to neutral without dropping the name', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping({
+      items: [
+        {
+          id: 4151,
+          name: 'Abyssal whip',
+          examine: '',
+          members: 'yes' as never,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: -5,
+          value: null,
+          icon: '',
+        },
+      ],
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+    expect(cache.resolveMetadata(4151)).toEqual({ members: false, buyLimit: null });
+  });
+
+  it('served payload carries enriched members/buyLimit explicitly; counts unchanged', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(mapping());
+    const { snapshots } = batch();
+    const enriched = rankBatchToTop10(
+      snapshots,
+      T0,
+      undefined,
+      cache.resolveName,
+      cache.resolveMetadata,
+    );
+    const plain = rankBatchToTop10(snapshots, T0);
+    expect(enriched.opportunities[0]?.item.members).toBe(true);
+    expect(enriched.opportunities[0]?.item.buyLimit).toBe(70);
+    // Explicit payload change vs the pre-enrichment neutral defaults.
+    expect(plain.opportunities[0]?.item.members).toBe(false);
+    expect(plain.opportunities[0]?.item.buyLimit).toBeNull();
+    // Counts are name/metadata-independent (price-only candidacy here).
+    expect(scoreBatchSnapshots(snapshots, T0, cache.resolveName, cache.resolveMetadata)).toEqual(
+      scoreBatchSnapshots(snapshots, T0),
+    );
+  });
+
+  it('membership filter becomes meaningful only with metadata (explicit, no silent shift)', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(mapping());
+    const { snapshots } = batch();
+    const enriched = rankBatchToTop10(
+      snapshots,
+      T0,
+      undefined,
+      cache.resolveName,
+      cache.resolveMetadata,
+    );
+    // 4151 members=true survives `members`, 4152 fallback neutral is f2p.
+    expect(
+      applyFilters(enriched.opportunities, { membership: 'members' }).map((o) => o.item.id),
+    ).toContain(4151);
+    expect(
+      applyFilters(enriched.opportunities, { membership: 'f2p' }).map((o) => o.item.id),
+    ).not.toContain(4151);
+    // Without metadata every entry is neutral f2p (previous behavior).
+    const plain = rankBatchToTop10(snapshots, T0);
+    expect(applyFilters(plain.opportunities, { membership: 'members' })).toHaveLength(0);
+    expect(applyFilters(plain.opportunities, { membership: 'f2p' })).toHaveLength(
+      plain.opportunities.length,
+    );
   });
 });

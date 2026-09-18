@@ -2,6 +2,7 @@ import type {
   MappingSnapshot,
   MarketDataProvider,
 } from '../../core/market/providers/MarketDataProvider.js';
+import type { ItemMetadataResolver } from './rankEntries.js';
 import type { ItemNameResolver } from './rankEntries.js';
 
 /**
@@ -25,28 +26,41 @@ import type { ItemNameResolver } from './rankEntries.js';
  *   validation throw maps to `false` with previous names kept (possibly
  *   empty → honest `Item <id>` fallback downstream). Mapping names must
  *   not break refresh.
- * Members/buyLimit enrichment stays out (name-only slice; filters keep
- * current semantics).
+ * S21 enrichment (#47): the same already-cached bulk snapshot also feeds
+ * members/buyLimit via `resolveMetadata` — NO new bulk pull beyond the 288
+ * count gate. Fail-open neutral defaults (`members: false`,
+ * `buyLimit: null`) on miss/invalid so ranking counts and refresh never
+ * break. Served-payload change is explicit (see rankEntries): members flags
+ * make the `membership` post-rank view filter meaningful; staleness bound
+ * (~24 h healthy, extending under outage by design) now covers metadata
+ * too — a stale members flag is filter-input staleness (display-only),
+ * never a pipeline failure.
  */
 
 export interface MappingNameCache {
   readonly resolveName: ItemNameResolver;
+  /** Sync lookup over the already-cached map only — never fetches. */
+  readonly resolveMetadata: ItemMetadataResolver;
   loadFromMapping(snapshot: MappingSnapshot): void;
   size(): number;
 }
 
 export function createMappingNameCache(): MappingNameCache {
   const names = new Map<number, string>();
+  const metas = new Map<number, { members: boolean; buyLimit: number | null }>();
   const resolveName: ItemNameResolver = (itemId: number) => names.get(itemId);
+  const resolveMetadata: ItemMetadataResolver = (itemId: number) => metas.get(itemId);
   return {
     resolveName,
+    resolveMetadata,
     loadFromMapping(snapshot: MappingSnapshot): void {
       // Atomic swap: validate + build temp first, swap only on success so a
-      // malformed snapshot never wipes previous good names (S21 slice-3).
+      // malformed snapshot never wipes previous good names/metadata.
       if (!snapshot || !Array.isArray(snapshot.items)) {
         throw new TypeError('Invalid mapping snapshot: items must be an array');
       }
-      const next = new Map<number, string>();
+      const nextNames = new Map<number, string>();
+      const nextMetas = new Map<number, { members: boolean; buyLimit: number | null }>();
       for (const item of snapshot.items) {
         if (
           typeof item?.id === 'number' &&
@@ -54,12 +68,27 @@ export function createMappingNameCache(): MappingNameCache {
           typeof item?.name === 'string' &&
           item.name.trim() !== ''
         ) {
-          next.set(item.id, item.name.trim());
+          nextNames.set(item.id, item.name.trim());
+          // Fail-open per entry: invalid members/buyLimit degrade to the
+          // neutral defaults rather than dropping the name.
+          nextMetas.set(item.id, {
+            members: item.members === true,
+            buyLimit:
+              typeof item.buyLimit === 'number' &&
+              Number.isInteger(item.buyLimit) &&
+              item.buyLimit > 0
+                ? item.buyLimit
+                : null,
+          });
         }
       }
       names.clear();
-      for (const [id, name] of next) {
+      for (const [id, name] of nextNames) {
         names.set(id, name);
+      }
+      metas.clear();
+      for (const [id, meta] of nextMetas) {
+        metas.set(id, meta);
       }
     },
     size: () => names.size,

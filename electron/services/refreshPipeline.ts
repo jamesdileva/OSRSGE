@@ -6,7 +6,7 @@ import {
   defaultRankingConfig,
   rankOpportunities,
 } from '../../core/market/ranking/scorer.js';
-import { buildRankEntries, type ItemNameResolver } from './rankEntries.js';
+import { buildRankEntries, type ItemMetadataResolver, type ItemNameResolver } from './rankEntries.js';
 import type { AppLogger } from './appLogger.js';
 
 /**
@@ -72,14 +72,17 @@ export type RankSnapshotsFn = (
  * observed counts can never drift from the served Top-10 (cleanup slice);
  * frozen-input safe (reads only, fresh entry objects). Name resolution is
  * an optional sync lookup (S21 slice-1 seam); default is the `Item <id>`
- * fallback so the pipeline never fetches.
+ * fallback so the pipeline never fetches. S21 enrichment (#47): optional
+ * sync metadata lookup over the same already-cached map (miss → neutral
+ * false/null); counts unchanged (`isCandidate` price-only here).
  */
 export function scoreBatchSnapshots(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
   resolveName?: ItemNameResolver,
+  resolveMetadata?: ItemMetadataResolver,
 ): RankingCounts {
-  const entries = buildRankEntries(snapshots, timestamp, resolveName);
+  const entries = buildRankEntries(snapshots, timestamp, resolveName, resolveMetadata);
   const ranked = rankOpportunities(entries, defaultRankingConfig()).length;
   return { rankingCandidates: entries.length, ranked };
 }

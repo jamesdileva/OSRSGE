@@ -6,7 +6,7 @@ import {
 } from '../../core/market/ranking/scorer.js';
 import { rankingVersionForPreset } from '../../core/market/ranking/weights.js';
 import { applyFilters, decodeFiltersFromIpc } from '../../core/market/ranking/filters.js';
-import { buildRankEntries, type ItemNameResolver } from './rankEntries.js';
+import { buildRankEntries, type ItemMetadataResolver, type ItemNameResolver } from './rankEntries.js';
 import type {
   MarketHistoryRequest,
   MarketHistoryResponse,
@@ -62,12 +62,15 @@ function buildLiveEntries(
   snapshots: readonly MarketSnapshot[],
   timestamp: number,
   resolveName?: ItemNameResolver,
+  resolveMetadata?: ItemMetadataResolver,
 ): ReturnType<typeof buildRankEntries> {
   // Cleanup slice: thin alias over the shared builder so served Top-10
   // can never drift from the pipeline's observed counts.
   // S21 slice-1: forwards the sync name lookup (cached /mapping names);
   // default stays the honest `Item <id>` fallback (no fetch in serve).
-  return buildRankEntries(snapshots, timestamp, resolveName);
+  // S21 enrichment (#47): forwards the sync metadata lookup over the same
+  // already-cached map (miss → neutral false/null, explicit payload change).
+  return buildRankEntries(snapshots, timestamp, resolveName, resolveMetadata);
 }
 
 /**
@@ -79,9 +82,10 @@ export function rankBatchToTop10(
   timestamp: number,
   request?: MarketTop10Request,
   resolveName?: ItemNameResolver,
+  resolveMetadata?: ItemMetadataResolver,
 ): MarketTop10Response {
   const ranked = rankOpportunities(
-    buildLiveEntries(snapshots, timestamp, resolveName),
+    buildLiveEntries(snapshots, timestamp, resolveName, resolveMetadata),
     defaultRankingConfig(),
   );
   const filtered =
@@ -103,6 +107,7 @@ export function createLiveTop10Handler(
   store: Pick<LiveMarketStore, 'get'>,
   now: () => number = Date.now,
   resolveName?: ItemNameResolver,
+  resolveMetadata?: ItemMetadataResolver,
 ): (request?: MarketTop10Request) => MarketTop10Response {
   return (request?: MarketTop10Request): MarketTop10Response => {
     const batch = store.get();
@@ -114,7 +119,7 @@ export function createLiveTop10Handler(
         opportunities: [],
       };
     }
-    return rankBatchToTop10(batch.snapshots, batch.timestamp, request, resolveName);
+    return rankBatchToTop10(batch.snapshots, batch.timestamp, request, resolveName, resolveMetadata);
   };
 }
 

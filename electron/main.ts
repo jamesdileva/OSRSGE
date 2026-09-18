@@ -80,7 +80,12 @@ void app.whenReady().then(async () => {
   // successful persist + scorer pass, so counting there bounds the bulk
   // `/mapping` cost to one fetch per 288 healthy refreshes (~24 h).
   const mappingRewarm = createMappingRewarmTracker();
-  const liveTop10 = createLiveTop10Handler(liveStore, Date.now, mappingNames.resolveName);
+  const liveTop10 = createLiveTop10Handler(
+    liveStore,
+    Date.now,
+    mappingNames.resolveName,
+    mappingNames.resolveMetadata,
+  );
   registerMarketHandlers(ipcMain, {
     getTop10: (request) => liveTop10(request),
     // History backend resolves lazily per request: registration runs
@@ -161,10 +166,17 @@ void app.whenReady().then(async () => {
         provider: priceProvider,
         repository: historyRepository,
         logger: () => getAppLogger(),
-        // Observed counts run through the same sync resolver as the
-        // served Top-10 above so served==observed on names too.
+        // Observed counts run through the same sync resolvers as the
+        // served Top-10 above so served==observed on names+metadata.
+        // Enrichment (#47): metadata comes from the same already-cached
+        // map — no extra bulk pull; miss degrades to neutral false/null.
         rankSnapshots: (snapshots, timestamp) =>
-          scoreBatchSnapshots(snapshots, timestamp, mappingNames.resolveName),
+          scoreBatchSnapshots(
+            snapshots,
+            timestamp,
+            mappingNames.resolveName,
+            mappingNames.resolveMetadata,
+          ),
         onBatch: (snapshots, timestamp) => {
           liveStore.set({ snapshots: [...snapshots], timestamp });
           // Count-gated re-warm: skipped (no fetch) until due; when due,

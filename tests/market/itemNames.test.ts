@@ -70,4 +70,32 @@ describe('S21 slice-1 sync name-injection seam (offline)', () => {
       'Item 4151',
     );
   });
+
+  it('enrichment #47: handler forwards cached metadata, miss stays neutral', () => {
+    const { snapshots } = normalizeLatest({
+      entries: {
+        4151: { high: 1000, highTime: null, low: 900, lowTime: null },
+        4152: { high: 500, highTime: null, low: 480, lowTime: null },
+      },
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    const store = createLiveMarketStore();
+    store.set({ snapshots: [...snapshots], timestamp: T0 });
+    const resolveMetadata = (id: number) =>
+      id === 4151 ? { members: true, buyLimit: 70 as number | null } : undefined;
+    const handler = createLiveTop10Handler(store, () => T0, undefined, resolveMetadata);
+    const opps = handler().opportunities;
+    expect(opps.find((o) => o.item.id === 4151)?.item.members).toBe(true);
+    expect(opps.find((o) => o.item.id === 4151)?.item.buyLimit).toBe(70);
+    // Miss → pre-enrichment neutral defaults (no throw, no fetch).
+    expect(opps.find((o) => o.item.id === 4152)?.item.members).toBe(false);
+    expect(opps.find((o) => o.item.id === 4152)?.item.buyLimit).toBeNull();
+    // No metadata resolver at all → all neutral (unchanged legacy shape).
+    const plain = createLiveTop10Handler(store, () => T0)().opportunities;
+    for (const o of plain) {
+      expect(o.item.members).toBe(false);
+      expect(o.item.buyLimit).toBeNull();
+    }
+  });
 });
