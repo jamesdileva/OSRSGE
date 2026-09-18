@@ -4,6 +4,49 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (#50b) — Mapping fast-retry on the count gate (2026-09-18)
+
+**Goal:** close the #50a carried nit per review #268 split (fast-retry
+separate from hardening): a startup-warm failure no longer waits a full
+288-success interval for the first re-warm. Bounded short gate, no retry
+storm, no fetch-path change.
+
+**Did:**
+- `electron/services/mappingCache.ts`: new
+  `MAPPING_REWARM_RETRY_REFRESHES = 12` (~1 h at the 5-min interval) +
+  `createMappingRewarmTracker(interval, retryInterval)` second param.
+  Effective gate is the short retry when the cache is empty (startup warm
+  never succeeded) or the last attempt failed, else the full 288; capped
+  at `min(retry, interval)` so a retry is never slower than healthy.
+  Reset-on-attempt preserved (outage costs ≤1 fetch per 12 refreshes when
+  unwarmed/failing vs 1 per 288 healthy); fail-closed bad retry args fall
+  back to the main interval; `lastFailed` set on both `false` and throw
+  paths (refresh contract still never rejects).
+- No `main.ts` change: the existing `onBatch` tracker call already passes
+  the live cache, so the empty-cache fast path covers the startup-failure
+  case with zero extra fetch or wiring.
+- Tests +2 (428 → 430): empty-cache short-gate retry (288/3 gate fires on
+  #3, reset-on-attempt still skips next) + failed-attempt fast retry with
+  success restoring the full gate in `tests/market/mappingCache.test.ts`.
+
+**Decisions:**
+- 12-success retry (≈1 h) by design: same-morning recovery from a startup
+  outage, still 12× cheaper than per-refresh retry under sustained outage
+  (no storm); healthy steady-state stays 1 fetch/24 h.
+- Empty-cache OR last-failed triggers the short gate (not AND): a cold
+  cache with no failure yet is the startup case; a warm cache with a
+  failure is the outage case — both deserve the fast lane, success clears
+  both back to the full gate.
+
+**Verified:**
+- `npm test` → 64 files, 430/430 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Wall-clock perf guard, split-brain/Electron-proof gates still open.
+- Members `undefined`→F2P stays the documented neutral; buyLimit
+  locale-string stays display-only.
+
 ## Sprint 21 (#50a) — Metadata hardening, display-only strictness (2026-09-18)
 
 **Goal:** close #260 hardening half of #50 per review #268 split
