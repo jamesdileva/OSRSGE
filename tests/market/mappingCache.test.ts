@@ -512,3 +512,63 @@ describe('examine/value follow-up: cached examine/value (offline)', () => {
     }
   });
 });
+
+describe('#50b fast-retry: empty-cache + failed-attempt short gate (offline)', () => {
+  it('empty cache retries on the short gate, not the full interval', async () => {
+    const { MAPPING_REWARM_RETRY_REFRESHES } = await import(
+      '../../electron/services/mappingCache.js'
+    );
+    expect(MAPPING_REWARM_RETRY_REFRESHES).toBe(12);
+    const cache = createMappingNameCache();
+    // Full interval 288 but empty cache → due after 12, not 288.
+    const tracker = createMappingRewarmTracker(288, 3);
+    let calls = 0;
+    const failing = {
+      getMapping: async () => {
+        calls += 1;
+        throw new Error('mapping down');
+      },
+    };
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('skipped');
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('skipped');
+    // 3rd success hits the short gate: attempt fails fail-open, empty stays.
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('failed');
+    expect(calls).toBe(1);
+    expect(cache.size()).toBe(0);
+    // Reset-on-attempt preserved: next success skips (no retry storm).
+    expect(await tracker.rewarmIfDue(cache, failing)).toBe('skipped');
+    expect(calls).toBe(1);
+  });
+
+  it('failed attempt retries fast; success restores the full gate', async () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(mapping());
+    // Healthy gate 5, retry gate 2.
+    const tracker = createMappingRewarmTracker(5, 2);
+    let fail = true;
+    let calls = 0;
+    const flapping = {
+      getMapping: async () => {
+        calls += 1;
+        if (fail) {
+          throw new Error('mapping down');
+        }
+        return mapping();
+      },
+    };
+    // Reach the healthy gate: 4 skips then a failed attempt on #5.
+    for (let i = 0; i < 4; i += 1) {
+      expect(await tracker.rewarmIfDue(cache, flapping)).toBe('skipped');
+    }
+    expect(await tracker.rewarmIfDue(cache, flapping)).toBe('failed');
+    const afterFirstAttempt = calls;
+    // Fast path: next due after 2 successes, not 5.
+    expect(await tracker.rewarmIfDue(cache, flapping)).toBe('skipped');
+    fail = false;
+    expect(await tracker.rewarmIfDue(cache, flapping)).toBe('ok');
+    expect(calls).toBe(afterFirstAttempt + 1);
+    // Success clears the fast path: next success skips (full gate of 5).
+    expect(await tracker.rewarmIfDue(cache, flapping)).toBe('skipped');
+    expect(calls).toBe(afterFirstAttempt + 1);
+  });
+});

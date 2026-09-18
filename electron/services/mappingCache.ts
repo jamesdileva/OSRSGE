@@ -151,6 +151,17 @@ export async function refreshMappingNameCache(
 export const MAPPING_REWARM_INTERVAL_REFRESHES = 288;
 
 /**
+ * #50b fast-retry: when the cache is empty (startup warm failed and no
+ * good snapshot yet) or the last re-warm attempt failed, the next attempt
+ * is due after this many successful refreshes instead of the full 288.
+ * 12 successes ≈ 1 h at the default 5-minute interval — fast enough to
+ * recover from a startup outage the same morning, slow enough that a
+ * sustained mapping outage costs at most ~1 bulk fetch/hour (not 1 per
+ * refresh: the counter still resets on *attempt*, so no retry storm).
+ */
+export const MAPPING_REWARM_RETRY_REFRESHES = 12;
+
+/**
  * Pure gate predicate: re-warm is due once `successesSinceWarm` reaches
  * `interval`. Fail-closed `false` on any non-integer/non-positive input
  * (a bad counter must never trigger a bulk fetch).
@@ -188,25 +199,39 @@ export interface MappingRewarmTracker {
 
 export function createMappingRewarmTracker(
   interval: number = MAPPING_REWARM_INTERVAL_REFRESHES,
+  retryInterval: number = MAPPING_REWARM_RETRY_REFRESHES,
 ): MappingRewarmTracker {
   let successes = 0;
+  let lastFailed = false;
+  // Fail-closed: bad retry intervals fall back to the main interval so a
+  // bad arg can never trigger a per-refresh fetch storm.
+  const retryEvery =
+    Number.isInteger(retryInterval) && retryInterval > 0 ? retryInterval : interval;
   return {
     get successesSinceWarm(): number {
       return successes;
     },
     async rewarmIfDue(cache, provider): Promise<MappingRewarmOutcome> {
       successes += 1;
-      if (!shouldRewarmMappingNames(successes, interval)) {
+      // #50b: empty cache (startup warm never succeeded) or a failed last
+      // attempt retries on the short gate; healthy warm uses the full gate.
+      // Capped at the main interval so a retry can never be slower than
+      // healthy, and never below 1 so every refresh cannot fetch.
+      const fastPath = lastFailed || cache.size() === 0;
+      const effective = fastPath ? Math.min(retryEvery, interval) : interval;
+      if (!shouldRewarmMappingNames(successes, effective)) {
         return 'skipped';
       }
       // Reset on attempt, not on success — bounds outage fetch cost.
       successes = 0;
       try {
         const ok = await refreshMappingNameCache(cache, provider);
+        lastFailed = !ok;
         return ok ? 'ok' : 'failed';
       } catch {
         // Defensive: refreshMappingNameCache never rejects by contract,
         // but the gate must still never break the refresh hot path.
+        lastFailed = true;
         return 'failed';
       }
     },
