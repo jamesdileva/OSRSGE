@@ -4,6 +4,49 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (examine/value follow-up) — Cached examine/value over the 288 gate (2026-09-18)
+
+**Goal:** close the carried `examine/value stay empty/null` nit from the
+#47 enrichment slice: serve real `examine`/`value` from the already-cached
+`/mapping` map with zero new bulk pull, fail-open neutrals, display-only
+(no filter/ranking input change).
+
+**Did:**
+- `electron/services/mappingCache.ts`: same atomic snapshot now stores
+  `{name, members, buyLimit, examine, value}` per id (blank-name skip
+  preserved); invalid `examine` (non-string) degrades per-entry to `''`,
+  invalid `value` (non-integer/<0) to `null`, without dropping the name;
+  no fetch-path change (startup warm + 288 count gate untouched).
+- `electron/services/rankEntries.ts`: `CachedItemMetadata` gains
+  `examine: string` + `value: number | null`; `buildRankEntries` serves
+  `meta?.examine ?? ''` / `meta?.value ?? null` — miss/`undefined` keeps
+  the pre-enrichment neutrals. No filter/ranking input reads them.
+- Tests +4 (417 → 421): cached examine/value load, per-entry invalid
+  degrade (bad examine→`''`, bad value→`null`, name kept), miss-shape
+  neutrals, served-payload passthrough in `itemNames.test.ts`.
+
+**Decisions:**
+- No new bulk pull by design: examine/value ride the existing snapshot +
+  288 gate; staleness bound (~24 h healthy, extending under outage) now
+  covers the full metadata row — display-only staleness, never a
+  pipeline failure.
+- Fail-open neutrals by design: mapping miss/outage keeps refresh +
+  ranking green; renderer does not surface examine/value yet
+  (ItemDetailsPanel follow-up), so this slice changes the served payload
+  only.
+- Fast-retry stays separate (carried); mappingCache/itemNames + full
+  suite green per gate (4).
+
+**Verified:**
+- `npm test` → 64 files, 421/421 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- Startup-warm failure still waits a full interval (no fast-retry).
+- Renderer never reads examine/value/members — ItemDetailsPanel
+  surfacing is the follow-up slice.
+- Wall-clock perf guard, split-brain/Electron-proof gates still open.
+
 ## Sprint 21 (enrichment #47) — Cached members/buyLimit over the 288 gate (2026-09-18)
 
 **Goal:** close gated build slice (#248/#249/#250): serve real members/
