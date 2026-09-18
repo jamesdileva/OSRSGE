@@ -148,7 +148,7 @@ describe('S20 slice-2 observed scorer counts in the pipeline refresh (offline)',
     expect(response.opportunities).toHaveLength(3);
   });
 
-  it('scores a full-universe batch in bounded time (S17 perf guard)', async () => {
+  it('scores a full-universe batch in a single bounded pass with zero repository reads (deterministic S17 perf guard)', async () => {
     const { normalizeLatest } = await import(
       '../../core/market/normalization/normalizer.js'
     );
@@ -159,14 +159,45 @@ describe('S20 slice-2 observed scorer counts in the pipeline refresh (offline)',
     }
     const batch = normalizeLatest({ entries, fetchedAt: T0, invalidRecords: 0 });
     expect(batch.snapshots.length).toBe(4534);
-    const started = Date.now();
+    // Direct correctness at full-universe scale (no timing: wall-clock
+    // `Date.now` bounds flake on shared CI hardware — determinism first).
     const counts = scoreBatchSnapshots(batch.snapshots, T0);
-    const elapsed = Date.now() - started;
     expect(counts.rankingCandidates).toBe(4534);
     expect(counts.ranked).toBeGreaterThan(0);
-    // Generous bound for shared CI hardware: proves sub-second scale, not
-    // the 8 s full-week history-scan cost that stays out of this path.
-    expect(elapsed).toBeLessThan(2000);
+    // Structural perf proof through the real pipeline: exactly one scorer
+    // pass over the persisted batch plus zero repository history reads —
+    // the 8 s full-week `getItemHistory` scan stays out of the refresh
+    // path by construction, not by stopwatch.
+    let rankCalls = 0;
+    let rankedArgLength = 0;
+    let historyReads = 0;
+    let latestReads = 0;
+    const provider = stubProvider(makeLatest(entries));
+    const { repository } = stubRepository({
+      getItemHistory: async () => {
+        historyReads += 1;
+        return [];
+      },
+      getLatestSnapshot: async () => {
+        latestReads += 1;
+        return null;
+      },
+    });
+    const refresh = createPipelineRefresh({
+      provider,
+      repository,
+      logger: null,
+      rankSnapshots: (snapshots, timestamp) => {
+        rankCalls += 1;
+        rankedArgLength = snapshots.length;
+        return scoreBatchSnapshots(snapshots, timestamp);
+      },
+    });
+    await refresh();
+    expect(rankCalls).toBe(1);
+    expect(rankedArgLength).toBe(4534);
+    expect(historyReads).toBe(0);
+    expect(latestReads).toBe(0);
   });
 
   it('never mutates frozen scorer inputs', async () => {
