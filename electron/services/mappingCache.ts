@@ -35,6 +35,10 @@ import type { ItemNameResolver } from './rankEntries.js';
  * (~24 h healthy, extending under outage by design) now covers metadata
  * too — a stale members flag is filter-input staleness (display-only),
  * never a pipeline failure.
+ * Examine/value follow-up: same map additionally stores `examine` + `value`
+ * from the already-cached snapshot — still NO new bulk pull. Invalid
+ * entries degrade per-entry to neutrals (`''`/`null`) without dropping the
+ * name; display-only (no filter/ranking input reads them).
  */
 
 export interface MappingNameCache {
@@ -47,7 +51,7 @@ export interface MappingNameCache {
 
 export function createMappingNameCache(): MappingNameCache {
   const names = new Map<number, string>();
-  const metas = new Map<number, { members: boolean; buyLimit: number | null }>();
+  const metas = new Map<number, { members: boolean; buyLimit: number | null; examine: string; value: number | null }>();
   const resolveName: ItemNameResolver = (itemId: number) => names.get(itemId);
   const resolveMetadata: ItemMetadataResolver = (itemId: number) => metas.get(itemId);
   return {
@@ -60,7 +64,7 @@ export function createMappingNameCache(): MappingNameCache {
         throw new TypeError('Invalid mapping snapshot: items must be an array');
       }
       const nextNames = new Map<number, string>();
-      const nextMetas = new Map<number, { members: boolean; buyLimit: number | null }>();
+      const nextMetas = new Map<number, { members: boolean; buyLimit: number | null; examine: string; value: number | null }>();
       for (const item of snapshot.items) {
         if (
           typeof item?.id === 'number' &&
@@ -69,8 +73,8 @@ export function createMappingNameCache(): MappingNameCache {
           item.name.trim() !== ''
         ) {
           nextNames.set(item.id, item.name.trim());
-          // Fail-open per entry: invalid members/buyLimit degrade to the
-          // neutral defaults rather than dropping the name.
+          // Fail-open per entry: invalid members/buyLimit/examine/value
+          // degrade to the neutral defaults rather than dropping the name.
           nextMetas.set(item.id, {
             members: item.members === true,
             buyLimit:
@@ -78,6 +82,13 @@ export function createMappingNameCache(): MappingNameCache {
               Number.isInteger(item.buyLimit) &&
               item.buyLimit > 0
                 ? item.buyLimit
+                : null,
+            examine: typeof item.examine === 'string' ? item.examine : '',
+            value:
+              typeof item.value === 'number' &&
+              Number.isInteger(item.value) &&
+              item.value >= 0
+                ? item.value
                 : null,
           });
         }

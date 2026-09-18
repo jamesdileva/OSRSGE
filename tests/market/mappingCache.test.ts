@@ -219,7 +219,7 @@ describe('S21 enrichment #47: cached members/buyLimit (offline)', () => {
   it('loads members/buyLimit from the same already-cached snapshot (no new pull)', () => {
     const cache = createMappingNameCache();
     cache.loadFromMapping(mapping());
-    expect(cache.resolveMetadata(4151)).toEqual({ members: true, buyLimit: 70 });
+    expect(cache.resolveMetadata(4151)).toEqual({ members: true, buyLimit: 70, examine: '', value: null });
     // Blank-name entries are skipped entirely → no metadata either.
     expect(cache.resolveMetadata(4152)).toBeUndefined();
   });
@@ -256,7 +256,7 @@ describe('S21 enrichment #47: cached members/buyLimit (offline)', () => {
       invalidRecords: 0,
     });
     expect(cache.resolveName(4151)).toBe('Abyssal whip');
-    expect(cache.resolveMetadata(4151)).toEqual({ members: false, buyLimit: null });
+    expect(cache.resolveMetadata(4151)).toEqual({ members: false, buyLimit: null, examine: '', value: null });
   });
 
   it('served payload carries enriched members/buyLimit explicitly; counts unchanged', () => {
@@ -305,6 +305,133 @@ describe('S21 enrichment #47: cached members/buyLimit (offline)', () => {
     expect(applyFilters(plain.opportunities, { membership: 'members' })).toHaveLength(0);
     expect(applyFilters(plain.opportunities, { membership: 'f2p' })).toHaveLength(
       plain.opportunities.length,
+    );
+  });
+});
+
+describe('examine/value follow-up: cached examine/value (offline)', () => {
+  function richMapping(): MappingSnapshot {
+    return {
+      items: [
+        {
+          id: 4151,
+          name: 'Abyssal whip',
+          examine: 'A powerful whip.',
+          members: true,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: 70,
+          value: 120000,
+          icon: '',
+        },
+        {
+          id: 4152,
+          name: '   ',
+          examine: 'Blank-name skip.',
+          members: false,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: null,
+          value: 1,
+          icon: '',
+        },
+      ],
+      fetchedAt: T0,
+      invalidRecords: 0,
+    };
+  }
+
+  it('loads examine/value from the same already-cached snapshot (no new pull)', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(richMapping());
+    expect(cache.size()).toBe(1);
+    expect(cache.resolveMetadata(4151)).toEqual({
+      members: true,
+      buyLimit: 70,
+      examine: 'A powerful whip.',
+      value: 120000,
+    });
+    // Blank-name entries are skipped entirely → no metadata either.
+    expect(cache.resolveMetadata(4152)).toBeUndefined();
+  });
+
+  it('fail-open neutral defaults on miss keep the pre-enrichment payload shape', () => {
+    const cache = createMappingNameCache();
+    const { snapshots } = batch();
+    // Empty cache: miss → neutral defaults (old behavior preserved).
+    const entries = buildRankEntries(snapshots, T0, cache.resolveName, cache.resolveMetadata);
+    for (const e of entries) {
+      expect(e.item.examine).toBe('');
+      expect(e.item.value).toBeNull();
+    }
+  });
+
+  it('invalid examine/value degrade per-entry to neutral without dropping the name', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping({
+      items: [
+        {
+          id: 4151,
+          name: 'Abyssal whip',
+          examine: 42 as never,
+          members: true,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: 70,
+          value: -5,
+          icon: '',
+        },
+        {
+          id: 4153,
+          name: 'Odd value',
+          examine: '',
+          members: false,
+          lowAlch: null,
+          highAlch: null,
+          buyLimit: null,
+          value: 1.5,
+          icon: '',
+        },
+      ],
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    expect(cache.resolveName(4151)).toBe('Abyssal whip');
+    expect(cache.resolveMetadata(4151)).toEqual({
+      members: true,
+      buyLimit: 70,
+      examine: '',
+      value: null,
+    });
+    // Non-integer value is not a real GE value → null.
+    expect(cache.resolveMetadata(4153)).toEqual({
+      members: false,
+      buyLimit: null,
+      examine: '',
+      value: null,
+    });
+  });
+
+  it('served payload carries enriched examine/value explicitly; counts unchanged', () => {
+    const cache = createMappingNameCache();
+    cache.loadFromMapping(richMapping());
+    const { snapshots } = batch();
+    const enriched = rankBatchToTop10(
+      snapshots,
+      T0,
+      undefined,
+      cache.resolveName,
+      cache.resolveMetadata,
+    );
+    const plain = rankBatchToTop10(snapshots, T0);
+    expect(enriched.opportunities[0]?.item.examine).toBe('A powerful whip.');
+    expect(enriched.opportunities[0]?.item.value).toBe(120000);
+    // Explicit payload change vs the pre-enrichment neutral defaults.
+    expect(plain.opportunities[0]?.item.examine).toBe('');
+    expect(plain.opportunities[0]?.item.value).toBeNull();
+    // Counts are name/metadata-independent (price-only candidacy here).
+    expect(scoreBatchSnapshots(snapshots, T0, cache.resolveName, cache.resolveMetadata)).toEqual(
+      scoreBatchSnapshots(snapshots, T0),
     );
   });
 });

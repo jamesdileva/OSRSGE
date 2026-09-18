@@ -83,14 +83,20 @@ describe('S21 slice-1 sync name-injection seam (offline)', () => {
     const store = createLiveMarketStore();
     store.set({ snapshots: [...snapshots], timestamp: T0 });
     const resolveMetadata = (id: number) =>
-      id === 4151 ? { members: true, buyLimit: 70 as number | null } : undefined;
+      id === 4151
+        ? { members: true, buyLimit: 70 as number | null, examine: 'A powerful whip.', value: 120000 as number | null }
+        : undefined;
     const handler = createLiveTop10Handler(store, () => T0, undefined, resolveMetadata);
     const opps = handler().opportunities;
     expect(opps.find((o) => o.item.id === 4151)?.item.members).toBe(true);
     expect(opps.find((o) => o.item.id === 4151)?.item.buyLimit).toBe(70);
+    expect(opps.find((o) => o.item.id === 4151)?.item.examine).toBe('A powerful whip.');
+    expect(opps.find((o) => o.item.id === 4151)?.item.value).toBe(120000);
     // Miss → pre-enrichment neutral defaults (no throw, no fetch).
     expect(opps.find((o) => o.item.id === 4152)?.item.members).toBe(false);
     expect(opps.find((o) => o.item.id === 4152)?.item.buyLimit).toBeNull();
+    expect(opps.find((o) => o.item.id === 4152)?.item.examine).toBe('');
+    expect(opps.find((o) => o.item.id === 4152)?.item.value).toBeNull();
     // No metadata resolver at all → all neutral (unchanged legacy shape).
     const plain = createLiveTop10Handler(store, () => T0)().opportunities;
     for (const o of plain) {

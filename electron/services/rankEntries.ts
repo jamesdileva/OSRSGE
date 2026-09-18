@@ -32,12 +32,22 @@ import type { RankEntry } from '../../core/market/ranking/scorer.js';
  * thin-evidence path). Staleness: metadata shares the ~24 h count-gated
  * re-warm bound of names (see mappingCache) — a stale members flag is
  * filter-input staleness, documented, display-only.
+ *
+ * Examine/value follow-up: the same cached snapshot also carries `examine`
+ * + `value` via `resolveMetadata` — still NO new bulk pull. On
+ * miss/undefined the payload keeps the pre-enrichment neutrals
+ * (`examine: ''`, `value: null`) fail-open. Display-only: no filter or
+ * ranking input reads examine/value, and the renderer does not surface
+ * them yet (ItemDetailsPanel follow-up) — so this changes the served
+ * payload only.
  */
 export type ItemNameResolver = (itemId: number) => string | undefined;
-/** Cached `/mapping` members/buyLimit only — never fetched in this path. */
+/** Cached `/mapping` members/buyLimit/examine/value only — never fetched in this path. */
 export interface CachedItemMetadata {
   members: boolean;
   buyLimit: number | null;
+  examine: string;
+  value: number | null;
 }
 export type ItemMetadataResolver = (itemId: number) => CachedItemMetadata | undefined;
 export function buildRankEntries(
@@ -61,8 +71,8 @@ export function buildRankEntries(
         name: resolved ? resolved : `Item ${snapshot.itemId}`,
         members: meta?.members ?? false,
         buyLimit: meta?.buyLimit ?? null,
-        examine: '',
-        value: null,
+        examine: meta?.examine ?? '',
+        value: meta?.value ?? null,
       },
       observationCount: 1,
       stalenessMinutes: 0,
