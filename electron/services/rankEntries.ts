@@ -1,6 +1,7 @@
 import { computeMetrics } from '../../core/market/analytics/metrics.js';
 import type { MarketSnapshot } from '../../core/market/normalization/normalizer.js';
 import type { RankEntry } from '../../core/market/ranking/scorer.js';
+import { normalizeCachedMetadata } from '../../core/market/ranking/metadataStrictness.js';
 
 /**
  * Sprint 20 cleanup: single shared batch → rank-entry builder.
@@ -66,30 +67,20 @@ export function buildRankEntries(
     }
     const resolved = resolveName?.(snapshot.itemId)?.trim();
     const raw = resolveMetadata?.(snapshot.itemId);
-    // #50a strictness: a custom resolver may return a partial shape —
-    // validate per field so miss/invalid stays the fail-open neutrals.
-    const rawRecord = (typeof raw === 'object' && raw !== null ? raw : undefined) as
-      | Partial<CachedItemMetadata>
-      | undefined;
-    const buyLimit =
-      typeof rawRecord?.buyLimit === 'number' &&
-      Number.isInteger(rawRecord.buyLimit) &&
-      rawRecord.buyLimit > 0
-        ? rawRecord.buyLimit
-        : null;
-    const examine = typeof rawRecord?.examine === 'string' ? rawRecord.examine.trim() : '';
-    const value =
-      typeof rawRecord?.value === 'number' &&
-      Number.isInteger(rawRecord.value) &&
-      rawRecord.value >= 0
-        ? rawRecord.value
-        : null;
+    // Single-source strictness: a custom resolver may return a partial
+    // shape — normalize per field so miss/invalid stays fail-open neutrals.
+    // Imported from core so the serve, cache-store, and panel display paths
+    // share one definition (see metadataStrictness.ts).
+    const meta = normalizeCachedMetadata(raw);
+    const buyLimit = meta.buyLimit;
+    const examine = meta.examine;
+    const value = meta.value;
     entries.push({
       metrics,
       item: {
         id: snapshot.itemId,
         name: resolved ? resolved : `Item ${snapshot.itemId}`,
-        members: rawRecord?.members === true,
+        members: meta.members,
         buyLimit,
         examine,
         value,

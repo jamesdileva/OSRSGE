@@ -1,5 +1,11 @@
 import type { JSX } from 'react';
 import { confidenceMultiplier } from '../../../core/market/ranking/confidence.js';
+import {
+  isMembersFlag,
+  normalizeBuyLimit,
+  normalizeExamine,
+  normalizeItemValue,
+} from '../../../core/market/ranking/metadataStrictness.js';
 import { riskMultiplier } from '../../../core/market/ranking/risk.js';
 import type { Opportunity, RiskLevel } from '../../../core/market/ranking/types.js';
 
@@ -48,10 +54,10 @@ const BREAKDOWN_ROWS = [
  * the mappingCache snapshot (zero new bulk pull). Miss/invalid stays
  * fail-open neutrals (never throws, never writes pipeline state, no
  * filter/ranking input change).
- * Serve/display parity: the panel re-applies the rankEntries serve
- * strictness (members === true, buyLimit integer > 0, value integer
- * >= 0, examine trimmed non-empty) so a non-pipeline Opportunity can
- * never display a value the serve path would null out.
+ * Serve/display parity: the panel applies the single-source serve
+ * strictness from `core/market/ranking/metadataStrictness.ts` (shared with
+ * rankEntries + mappingCache) so a non-pipeline Opportunity can never
+ * display a value the serve path would null out.
  */
 export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps): JSX.Element {
   if (opportunity == null) {
@@ -61,6 +67,11 @@ export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps)
   // Base → Final chain must equal base × riskMult × confMult.
   const riskMult = riskMultiplier(opportunity.risk);
   const confMult = confidenceMultiplier(opportunity.confidence);
+  // Single-source metadata strictness (shared with the serve path): a
+  // non-pipeline Opportunity can never display a value serve would null out.
+  const displayBuyLimit = normalizeBuyLimit(opportunity.item.buyLimit);
+  const displayExamine = normalizeExamine(opportunity.item.examine);
+  const displayValue = normalizeItemValue(opportunity.item.value);
   return (
     <section aria-label={`Details for ${opportunity.item.name}`}>
       <h3>
@@ -97,29 +108,13 @@ export default function ItemDetailsPanel({ opportunity }: ItemDetailsPanelProps)
           {Math.round(opportunity.confidence * 100)}% (×{confMult.toFixed(3)})
         </dd>
         <dt>Membership</dt>
-        <dd>{opportunity.item.members === true ? 'Members' : 'Free-to-play'}</dd>
+        <dd>{isMembersFlag(opportunity.item.members) ? 'Members' : 'Free-to-play'}</dd>
         <dt>Buy limit</dt>
-        <dd>
-          {typeof opportunity.item.buyLimit === 'number' &&
-          Number.isInteger(opportunity.item.buyLimit) &&
-          opportunity.item.buyLimit > 0
-            ? opportunity.item.buyLimit.toLocaleString()
-            : '—'}
-        </dd>
+        <dd>{displayBuyLimit !== null ? displayBuyLimit.toLocaleString() : '—'}</dd>
         <dt>Examine</dt>
-        <dd>
-          {typeof opportunity.item.examine === 'string' && opportunity.item.examine.trim() !== ''
-            ? opportunity.item.examine.trim()
-            : '—'}
-        </dd>
+        <dd>{displayExamine !== '' ? displayExamine : '—'}</dd>
         <dt>Value</dt>
-        <dd>
-          {typeof opportunity.item.value === 'number' &&
-          Number.isInteger(opportunity.item.value) &&
-          opportunity.item.value >= 0
-            ? formatGp(opportunity.item.value)
-            : '—'}
-        </dd>
+        <dd>{displayValue !== null ? formatGp(displayValue) : '—'}</dd>
       </dl>
       <table aria-label="Score breakdown">
         <thead>

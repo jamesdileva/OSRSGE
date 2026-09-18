@@ -4,6 +4,13 @@ import ItemDetailsPanel from '../../src/components/dashboard/ItemDetailsPanel.ts
 import Dashboard from '../../src/pages/Dashboard.tsx';
 import { confidenceMultiplier } from '../../core/market/ranking/confidence.js';
 import { riskMultiplier } from '../../core/market/ranking/risk.js';
+import {
+  isMembersFlag,
+  normalizeBuyLimit,
+  normalizeItemValue,
+} from '../../core/market/ranking/metadataStrictness.js';
+import { normalizeLatest } from '../../core/market/normalization/normalizer.js';
+import { buildRankEntries } from '../../electron/services/rankEntries.js';
 import type { Opportunity } from '../../core/market/ranking/types.js';
 
 afterEach(() => {
@@ -226,5 +233,44 @@ describe('Sprint 8 slice-1 ItemDetailsPanel (pure, props-driven)', () => {
       />,
     );
     expect(screen.getByText('0 gp')).toBeInTheDocument();
+  });
+
+  it('single-source strictness: serve + display agree via one predicate (no drift)', () => {
+    const T0 = 1_786_000_000_000;
+    const { snapshots } = normalizeLatest({
+      entries: { 4151: { high: 1000, highTime: null, low: 900, lowTime: null } },
+      fetchedAt: T0,
+      invalidRecords: 0,
+    });
+    // Hostile resolver shape: truthy members, zero buyLimit, negative value.
+    const hostile = { members: 1, buyLimit: 0, examine: '  x  ', value: -5 };
+    const [served] = buildRankEntries(snapshots, T0, undefined, () => hostile as never);
+    // Serve side degrades through the shared predicates — assert via the
+    // predicates themselves so a bound change moves both sides together.
+    expect(served?.item.members).toBe(isMembersFlag(hostile.members));
+    expect(served?.item.buyLimit).toBe(normalizeBuyLimit(hostile.buyLimit));
+    expect(served?.item.value).toBe(normalizeItemValue(hostile.value));
+    expect(served?.item.members).toBe(false);
+    expect(served?.item.buyLimit).toBeNull();
+    expect(served?.item.value).toBeNull();
+    // Display side renders the served neutrals from the same predicates.
+    cleanup();
+    render(
+      <ItemDetailsPanel
+        opportunity={makeOpportunity(4151, 55, {
+          item: {
+            id: 4151,
+            name: 'Abyssal whip',
+            members: hostile.members as never,
+            buyLimit: hostile.buyLimit as never,
+            examine: 'A weapon from the abyss.',
+            value: hostile.value as never,
+          },
+        })}
+      />,
+    );
+    expect(screen.getByText('Free-to-play')).toBeInTheDocument();
+    const details = screen.getByRole('region', { name: 'Details for Abyssal whip' });
+    expect(within(details).getAllByText('—').length).toBeGreaterThanOrEqual(2);
   });
 });

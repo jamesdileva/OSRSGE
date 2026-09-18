@@ -5,6 +5,7 @@ import type {
 import type { ItemMetadataResolver } from './rankEntries.js';
 import type { CachedItemMetadata } from './rankEntries.js';
 import type { ItemNameResolver } from './rankEntries.js';
+import { normalizeCachedMetadata } from '../../core/market/ranking/metadataStrictness.js';
 
 /**
  * Sprint 21 slice-2: async `/mapping` name cache for the S21 sync seam.
@@ -76,22 +77,8 @@ export function createMappingNameCache(): MappingNameCache {
           nextNames.set(item.id, item.name.trim());
           // Fail-open per entry: invalid members/buyLimit/examine/value
           // degrade to the neutral defaults rather than dropping the name.
-          nextMetas.set(item.id, {
-            members: item.members === true,
-            buyLimit:
-              typeof item.buyLimit === 'number' &&
-              Number.isInteger(item.buyLimit) &&
-              item.buyLimit > 0
-                ? item.buyLimit
-                : null,
-            examine: typeof item.examine === 'string' ? item.examine.trim() : '',
-            value:
-              typeof item.value === 'number' &&
-              Number.isInteger(item.value) &&
-              item.value >= 0
-                ? item.value
-                : null,
-          });
+          // Single-source strictness shared with the serve + display paths.
+          nextMetas.set(item.id, normalizeCachedMetadata(item));
         }
       }
       // #50a: value 0 is a real GE value (kept), null stays the miss
