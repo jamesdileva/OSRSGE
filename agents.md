@@ -4,6 +4,55 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Sprint 21 (#50a) — Metadata hardening, display-only strictness (2026-09-18)
+
+**Goal:** close #260 hardening half of #50 per review #268 split
+(hardening first, fast-retry separate as #50b): trim examine, dedupe
+the inline meta type, strict serve-path validation, panel display
+guards, explicit value 0-vs-null. Zero new bulk pull, fail-open
+neutrals, no filter/ranking input change.
+
+**Did:**
+- `electron/services/mappingCache.ts`: `metas` maps now typed as
+  `CachedItemMetadata` (imported, no inline duplicate — drift closed);
+  `examine` trims on store (`'  x  '`→`'x'`, whitespace-only→`''`)
+  matching the trim-on-store name precedent; value `>= 0` bound
+  documented explicit (0 kept, null stays the miss neutral).
+- `electron/services/rankEntries.ts`: serve path validates per field
+  over a `Partial<CachedItemMetadata>` view — `members === true` else
+  `false`, buyLimit integer>0 else `null`, examine string→trimmed else
+  `''`, value integer>=0 else `null`. Partial/custom-resolver shapes
+  degrade per field, never throw, never fetch.
+- `src/components/dashboard/ItemDetailsPanel.tsx`: buyLimit renders
+  only on integer-number (`toLocaleString`, else `—` — non-number can
+  no longer display); examine renders trimmed non-empty or `—`
+  (whitespace-only no longer renders blank). Value 0 keeps `'0 gp'`
+  via `formatGp`, distinct from null `—`.
+- Tests +5 (423 → 428): store trim (padded/whitespace-only), value-0
+  kept vs null-miss, partial-shape strict serve, panel whitespace→dash
+  + 0-gp, panel non-number buyLimit→dash in
+  `tests/market/mappingCache.test.ts` + `tests/ui/item-details.test.tsx`.
+
+**Decisions:**
+- Split #50 per agent-b WARNING #268: hardening (#50a, this slice)
+  ships alone; fast-retry stays #50b (main warm + rewarm timing, no
+  retry storm) — different blast radii, no bundling.
+- Trim at store + serve + render (defense in depth): cache holds
+  canonical text, custom resolvers bypassing the cache still degrade
+  honestly at serve/render.
+- Display-only again: no filter/ranking input reads the touched
+  fields; served==observed by inheritance (shared builder).
+
+**Verified:**
+- `npm test` → 64 files, 428/428 pass.
+- `npm run typecheck` + `npm run build` green.
+
+**Carried nits (non-gating):**
+- #50b fast-retry still open (startup-warm failure waits a full interval).
+- Wall-clock perf guard, split-brain/Electron-proof gates still open.
+- Members `undefined`→F2P stays the documented neutral; buyLimit
+  locale-string stays display-only.
+
 ## Sprint 21 (#48) — ItemDetailsPanel surfacing, display-only cached metadata (2026-09-18)
 
 **Goal:** close #48/#49: renderer surfaces the already-cached
