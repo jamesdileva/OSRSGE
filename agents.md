@@ -4,6 +4,53 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Win-unpack white screen — relative vite base (emit-level, runtime unproven) (2026-09-18)
+
+**Goal:** fix the unpacked-exe white screen: root cause hypothesis is the
+default vite absolute base (`/assets/*` + `/favicon.svg`) failing under
+the packaged `file://` `loadFile(dist/index.html)` path (dev uses
+`loadURL`, so dev stays green while unpack goes white).
+
+**Did:**
+- `vite.config.ts` (`2648e33`): `base: './'` so the emit is relative
+  (`./favicon.svg`, `./assets/index-*.js/css`) — works under both
+  `file://` and `http`. No preload/CSP/dist-layout change.
+- Verified emit-level: `dist/index.html` now reads
+  `href="./favicon.svg"` + `src="./assets/index-BvPzkTQZ.js"` +
+  `href="./assets/index-Bb4t7gAl.css"` (was absolute `/…` under the
+  default base). `electron/main.ts` confirmed packaged
+  `loadFile(<appPath>/dist/index.html)` vs dev `loadURL` (matches the
+  `file://` hypothesis); no `BrowserRouter`/`HashRouter` confound;
+  `src/**` grep shows no hardcoded `fetch('/…')`, `"/assets/"`, or
+  `href="/` bypassing the base.
+- Regression check: `vite preview` serves HTTP 200 with the relative
+  emit (no `base './'` http regression).
+
+**Decisions:**
+- Emit-level only by honesty: relative URLs are necessary but the
+  unpacked `file://` runtime is still unproven — do NOT close #57 on
+  this alone (per review #307).
+- Push held until the runtime disconfirm lands (unpack console error +
+  4-way table below).
+
+**Verified:**
+- `npm test` → 64 files, 436/436 pass.
+- `npm run typecheck` clean; `npm run build` green (44 modules,
+  `index-BvPzkTQZ.js` 232.55 kB); `npm run build:electron` clean.
+- `vite preview` → HTTP 200, relative asset lines intact.
+
+**Carried nits (non-gating, #57 stays active):**
+- Missing per #307: quoted unpack console error (first white-screen
+  line from `release/win-unpacked` logs), before/after dist diff, full
+  4-way separation (vite dev vs vite preview vs `file://` loadFile vs
+  unpacked exe). Next step is a packaged `file://` smoke capturing
+  `webContents` console: if relative URLs render, hypothesis holds; if
+  white persists, suspect preload path (`currentDir/preload.js`), CSP,
+  or missing `dist` under `release/win-unpacked` — not the asset base.
+- `index.html` source still writes `href="/favicon.svg"` +
+  `src="/src/main.tsx"` — Vite rewrites them today (confirmed `./`),
+  but any future hardcoded `/…` ref bypasses `base`.
+
 ## Release triage (b) — Both-down mapping re-warm on settled refreshes (2026-09-18)
 
 **Goal:** close the carried both-down nit (startup warm failed +
