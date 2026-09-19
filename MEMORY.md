@@ -1,7 +1,7 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: #57 win-unpack white screen — base './' emit-only 2648e33 + guards 0129fe6/fef9f46, train 5-ahead held per #307/#334 (emit CLEAR, no push until runtime disconfirm).
-Next: runtime disconfirm needs unpack console error + asar/dist check + 4-way table (dev/preview/file/unpack) + preload/CSP check; human #325 stale-run explains white if old exe.
+Current goal: #57 CLOSED 2026-09-19 — rebuilt win-unpacked from fixed tree, runtime proof landed (preview 200 + file:// smoke 0 errors + unpacked exe boots sqlite/4662 cached), train pushed. Human owns eyeball test + polish/audit phase.
+Next: human testing; no active build task. (c) split-brain gates stay parked non-gating.
 Key learnings: serve-from-memory (no re-read); last-good on failure;
 lazy backend resolution per-request; stub retired honestly via version
 tag change; quality non-overlap — ≤0/non-finite stays normalizer

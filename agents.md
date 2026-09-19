@@ -4,6 +4,59 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Win-unpack #57 CLOSED — runtime proof landed, train pushed (2026-09-19)
+
+**Goal:** lift the review #307 push-hold: prove the relative-base fix in
+the packaged `file://` runtime (unpack console + 4-way table), then push
+the 6-commit held train.
+
+**Did:**
+- Rebuilt `release/win-unpacked` from the fixed tree
+  (`npm run pack:win-unpack` green, exe + `app.asar` stamped 9/18 —
+  replacing the stale 9/17 bundle that predated `2648e33` and explained
+  the white screen on the old exe).
+- Asar audit (read-only string scan of `resources/app.asar`): 0 true
+  absolute refs (`"/assets|/favicon|/src` after quote/paren — the only
+  `/assets/` hits are substrings of `./assets/`), 2 relative
+  `./assets/` refs intact. Before/after dist diff: was `/assets/
+  index-*.js` + `/favicon.svg` (vite default `/` base) → now
+  `./assets/index-BvPzkTQZ.js` + `./assets/index-Bb4t7gAl.css` +
+  `./favicon.svg`.
+- 4-way table (all first-hand except dev, unaffected by construction):
+  vite dev `loadURL` http — not re-run, base-agnostic by construction;
+  `vite preview` http — 200 with relative refs intact (fresh);
+  `file://` `loadFile` smoke (temp electron harness, hidden window,
+  12 s console capture) — `failed: null`, 0 app console errors;
+  unpacked exe — 4 processes responding, clean kill, `app.log` quotes
+  `app started v0.1.0` + `history backend: sqlite` + `mapping names:
+  4662 cached`; Chromium session/blobs persisted (renderer lived).
+- File:// smoke's single level-2 line is Electron's own no-CSP security
+  notice, not an app error — render unblocked. No CSP set is now a
+  polish-phase follow-up (audit), not a #57 blocker.
+- Pushed the held train (fix + guard + tightening + 3 docs + this entry).
+
+**Decisions:**
+- #57 CLOSED: hypothesis confirmed — absolute base caused the white
+  screen, relative emit renders under `file://` with zero console errors.
+- (c) Split-brain/Electron-proof gates stay parked (non-gating, never
+  blocked a merge — human agreed #57-proof + push is the finish line).
+- Human owns next: eyeball test + polish/bug-fix/audit phase (long
+  timeline, out of scope here).
+
+**Verified:**
+- `npm test` → 65 files, 440/440 pass (was 436 — suite grew, all green).
+- `npm run typecheck` clean; `npm run build` green (same asset hashes
+  `index-BvPzkTQZ.js` 232.55 kB); `npm run build:electron` clean (via pack).
+- `git status` clean (`release/` gitignored per README).
+
+**Carried (non-gating, polish/audit phase):**
+- No CSP header on the renderer (Electron notice only, render unaffected).
+- `index.html` source keeps `/favicon.svg` + `/src/main.tsx` (Vite
+  rewrites today; future hardcoded `/…` bypasses `base` — guard test
+  watches `src/**` + root html).
+- (d) Members `undefined`→F2P neutral; buyLimit locale-string
+  display-only (documented, accepted).
+
 ## Win-unpack white screen — relative vite base (emit-level, runtime unproven) (2026-09-18)
 
 **Goal:** fix the unpacked-exe white screen: root cause hypothesis is the
