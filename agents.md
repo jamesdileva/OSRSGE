@@ -4,6 +4,78 @@ Running history of what was built, decided, and verified. Newest sprint first.
 Rule: no sprint is merged unless `npm test`, `npm run typecheck`, and
 `npm run build` are all green.
 
+## Dead-bridge P0 — ESM preload + asar require, CJS + bundled fix, sidebar wired (2026-09-19)
+
+**Goal:** human reported the unpacked exe renders (white screen gone)
+but shows `Desktop bridge unavailable`, dead sidebar tabs, and an empty
+dashboard — bridge-unavailable IN THE EXE is a P0 (packaging proven
+correct: preload/main/dist all in the asar).
+
+**Did (diagnosis, all first-hand via remote-debugging the exe):**
+- `typeof window.osrsApi` → `undefined` in the packaged renderer.
+  Quoted console error: `Unable to load preload script:
+  .../app.asar/dist-electron/electron/preload.js` +
+  `SyntaxError: Cannot use import statement outside a module` at
+  `runPreloadScript (sandbox_bundle)`. Root cause: `module: nodenext` +
+  root `"type": "module"` emitted ESM, which Electron's sandboxed
+  preload runner parses as a classic script. (Dev runs from real disk
+  never caught it; all preload tests mock `window.osrsApi`; S1 "zero
+  console errors" never asserted the bridge.)
+- Fix attempt 1 (CJS emit) exposed the second half: user-pasted
+  `ReferenceError: exports is not defined in ES module scope ...
+  app.asar/package.json contains "type": "module"` — the packed root
+  package.json re-typed the CJS emit as ESM and the app opened NO
+  window (3 procs, no targets, no logs). Fixed with generated
+  `dist-electron/package.json {"type":"commonjs"}`
+  (`scripts/ensure-electron-cjs-package.js`, wired into
+  `build:electron`; dist-electron is gitignored so it stamps every build).
+- Fix attempt 2 exposed the third half: `Error: module not found:
+  ../shared/ipc.js at preloadRequire` — the sandbox runner cannot see
+  inside app.asar (unpatched fs), so ANY relative require from preload
+  fails. Fixed by bundling preload self-contained (esbuild, new
+  devDependency, `electron` external; channels inlined, single
+  `require("electron")`). `shared/ipc.ts` stays the single contract
+  source (bundle input, type imports erase).
+- Sidebar tabs wired (single-page, no router per human): real
+  `<button>`s with active state scrolling to Dashboard sections
+  (`dashboard→top`, `watchlist→Watchlist`, `history→Item details`
+  where the 24h chart lives); Settings stays a disabled span with
+  `Later` (no feature behind it anywhere). `button.nav-item` CSS reset.
+- Refresh-now button (bridge-only, honest fallback hides it
+  bridgeless): runs the existing `MARKET_REFRESH_NOW` IPC then
+  re-reads Top-10 through the mount path — fresh launches no longer
+  stare at honest-empty for 5 min. Failures inline, never a crash.
+- Tests +11 (440 → 451): `tests/build/preloadBundle.test.ts`
+  (esbuild step + no-node:-builtins + emitted-bundle has no relative
+  require) and `tests/ui/sidebar-refresh.test.tsx` (8: tab render/
+  select/disabled, scroll + no-scroll default, refresh hidden
+  bridgeless, refresh re-read, refresh-failure inline).
+
+**Decisions:**
+- CJS + nested type-marker + bundled preload (not `sandbox: false`):
+  the S1 security flags (contextIsolation/sandbox/no-nodeIntegration,
+  unit-tested) stay untouched.
+- No separate History/Settings pages (human-confirmed): history lives
+  under Item details; Settings has nothing behind it.
+- Honest-empty semantics untouched (tests still assert the copy); the
+  button only shortens the wait.
+
+**Verified (in-exe, remote-debugged, fresh 10:43pm bundle):**
+- `typeof window.osrsApi` → `object`; surfaces
+  `app,market,watchlist,alerts,flips,quality,logs`;
+  `getVersion()` → `0.1.0`; dashboard footer reads
+  `IPC round-trip OK — app version: 0.1.0`.
+- Sidebar buttons `Dashboard|Watchlist|History` (+ disabled Settings
+  correctly not a button); `Refresh now` present.
+- `npm test` → 67 files, 451/451 (5 consecutive green runs; 1 earlier
+  transient single-file failure never reproduced, no FAIL lines on
+  re-runs — noted, not chased); `typecheck` + `build` +
+  `build:electron` clean; `git status` clean (`release/` gitignored).
+
+**Carried (non-gating, polish/audit phase):**
+- No CSP header (Electron notice only); default Electron icon; (c)
+  split-brain gates parked; (d) documented neutrals stand.
+
 ## Win-unpack #57 CLOSED — runtime proof landed, train pushed (2026-09-19)
 
 **Goal:** lift the review #307 push-hold: prove the relative-base fix in

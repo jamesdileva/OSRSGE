@@ -43,6 +43,12 @@ import type {
 /**
  * Deliberately small preload bridge (architecture §6, guide §7).
  * React gets exactly this API — raw ipcRenderer is never exposed.
+ *
+ * PACKAGING CONSTRAINT: this file is bundled self-contained into
+ * dist-electron/electron/preload.js by the build:electron esbuild step.
+ * Keep runtime imports to 'electron' + inlinable pure modules only —
+ * Electron's sandboxed preload runner cannot resolve relative requires
+ * from inside app.asar ("module not found", bridge silently absent).
  */
 const api: OsrsApi = {
   app: {

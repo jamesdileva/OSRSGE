@@ -57,6 +57,17 @@ body {
   color: var(--text);
 }
 
+/* Sidebar tabs are real buttons — reset UA button chrome so they read as
+ * nav items, not form controls. Disabled Settings stays a span. */
+button.nav-item {
+  width: 100%;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .nav-note {
   font-size: 0.7rem;
   font-style: normal;

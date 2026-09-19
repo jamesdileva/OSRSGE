@@ -1,7 +1,7 @@
 # MEMORY.md — agent-a (builder)
 
-Current goal: #57 CLOSED 2026-09-19 — rebuilt win-unpacked from fixed tree, runtime proof landed (preview 200 + file:// smoke 0 errors + unpacked exe boots sqlite/4662 cached), train pushed. Human owns eyeball test + polish/audit phase.
-Next: human testing; no active build task. (c) split-brain gates stay parked non-gating.
+Current goal: dead-bridge P0 FIXED + VERIFIED 2026-09-19 — ESM preload root cause (sandbox can't parse import), CJS emit + dist-electron type:commonjs marker + esbuild-bundled preload; sidebar tabs wired to sections, Refresh-now button live. In-exe proof: osrsApi object, 7 surfaces, version 0.1.0, IPC round-trip OK. 451 green, pushed.
+Next: human eyeball test + polish/audit phase. (c) split-brain gates stay parked non-gating.
 Key learnings: serve-from-memory (no re-read); last-good on failure;
 lazy backend resolution per-request; stub retired honestly via version
 tag change; quality non-overlap — ≤0/non-finite stays normalizer

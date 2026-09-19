@@ -31,11 +31,23 @@ import FlipCalculatorPanel from '../components/dashboard/FlipCalculatorPanel.tsx
 import DataQualityPanel from '../components/dashboard/DataQualityPanel.tsx';
 import LogViewerPanel from '../components/dashboard/LogViewerPanel.tsx';
 import { buildDashboardViewModel } from '../components/dashboard/dashboardViewModel.ts';
-import { addAlertRuleRequest, addWatchedItem, assessQualityRequest, calculateFlipRequest, fetchAlertRules, fetchLogRecent, fetchLogSummary, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest } from '../services/electronApi.ts';
+import { addAlertRuleRequest, addWatchedItem, assessQualityRequest, calculateFlipRequest, fetchAlertRules, fetchLogRecent, fetchLogSummary, fetchTop10, fetchWatchlist, fetchAppVersion, fetchItemHistory, getDesktopApi, isDesktopBridgeAvailable, removeAlertRuleRequest, removeWatchedItem, setAlertRuleEnabledRequest, triggerManualRefresh } from '../services/electronApi.ts';
 import '../styles/dashboard.css';
 
 /** UI state model per implementation guide §35. */
 export type DashboardStatus = 'idle' | 'loading' | 'success' | 'error';
+
+/**
+ * Sidebar tab → Dashboard section anchor. The app has no router: tabs
+ * scroll the single page. `history` targets Item details because the 24h
+ * price chart lives there (no separate History page by design).
+ * `settings` never arrives here — the sidebar renders it disabled.
+ */
+const SECTION_ANCHORS: Record<string, string> = {
+  dashboard: 'section-top',
+  watchlist: 'section-watchlist',
+  history: 'section-history',
+};
 
 export interface DashboardProps {
   status?: DashboardStatus;
@@ -69,6 +81,12 @@ export interface DashboardProps {
   onAddAlert?: (draft: AlertRuleDraft) => void;
   onRemoveAlert?: (id: string) => void;
   onToggleAlert?: (id: string, enabled: boolean) => void;
+  /**
+   * Single-page section navigation: the App-owned sidebar tab. When set,
+   * the Dashboard scrolls to the matching section anchor (no routing).
+   * Undefined (tests, props path) scrolls nothing.
+   */
+  activeSection?: string;
 }
 
 export default function Dashboard({
@@ -86,6 +104,7 @@ export default function Dashboard({
   onAddAlert,
   onRemoveAlert,
   onToggleAlert,
+  activeSection,
 }: DashboardProps): JSX.Element {
   const [bridgeStatus, setBridgeStatus] = useState<DashboardStatus>(() =>
     statusProp ?? (isDesktopBridgeAvailable() ? 'loading' : 'idle'),
@@ -301,6 +320,32 @@ export default function Dashboard({
       })
       .catch((err: unknown) => {
         setAlertsError(err instanceof Error ? err.message : 'Unknown error');
+      });
+  };
+
+  // Manual refresh (header-adjacent, bridge-only): runs one scheduler
+  // refresh now via the existing MARKET_REFRESH_NOW IPC, then re-reads the
+  // live Top-10 the same way the mount effect does — so a fresh launch is
+  // never a 5-minute blank stare. Bridgeless browser mode hides the button
+  // (no refresh to trigger); failures surface inline, never as a crash.
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const handleRefreshNow = (): void => {
+    setManualRefreshing(true);
+    setRefreshError(null);
+    triggerManualRefresh()
+      .then(() => fetchTop10({ filters: encodeFiltersForIpc(DEFAULT_FILTERS) }))
+      .then((response) => {
+        setLiveOpportunities(response.opportunities);
+        setLiveItemsAnalyzed(response.itemsAnalyzed);
+        setLiveComputedAt(response.computedAt);
+        setBridgeStatus('success');
+        setTop10Error(null);
+        setManualRefreshing(false);
+      })
+      .catch((err: unknown) => {
+        setRefreshError(err instanceof Error ? err.message : 'Unknown error');
+        setManualRefreshing(false);
       });
   };
 
@@ -543,11 +588,38 @@ export default function Dashboard({
     };
   }, [alertRulesProp]);
 
+  // Sidebar tab → section scroll (no router). Runs on mount and on every
+  // tab change; unknown/absent sections are ignored. scrollIntoView is
+  // guarded — jsdom (tests) does not implement it.
+  useEffect(() => {
+    if (activeSection === undefined) {
+      return;
+    }
+    const anchor = SECTION_ANCHORS[activeSection];
+    if (anchor === undefined) {
+      return;
+    }
+    const target = document.getElementById(anchor);
+    if (target !== null && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView();
+    }
+  }, [activeSection]);
+
   return (
-    <section aria-label="Market dashboard">
+    <section aria-label="Market dashboard" id="section-top">
       <MarketSummary summary={viewModel.summary} />
 
       <h2>Top 10 Daily Opportunities</h2>
+      {bridgeAvailable && statusProp === undefined && (status === 'idle' || status === 'success') && (
+        <div>
+          <button type="button" onClick={handleRefreshNow} disabled={manualRefreshing}>
+            {manualRefreshing ? 'Refreshing…' : 'Refresh now'}
+          </button>
+          {refreshError !== null && (
+            <p className="notice notice-error">Refresh failed: {refreshError}</p>
+          )}
+        </div>
+      )}
       {(status === 'idle' || status === 'success') && (
         <FilterBar filters={filters} onChange={setFilters} />
       )}
@@ -562,7 +634,7 @@ export default function Dashboard({
       )}
       {(status === 'idle' || status === 'success') && viewModel.top10.length > 0 && (
         <>
-          <h2>Item details</h2>
+          <h2 id="section-history">Item details</h2>
           <ItemDetailsPanel opportunity={selectedOpportunity} />
           {selectedOpportunity !== null && effectiveSelectedItemId !== null && (
             <button
@@ -596,7 +668,7 @@ export default function Dashboard({
       )}
       {(status === 'idle' || status === 'success') && (
         <>
-          <h2>Watchlist</h2>
+          <h2 id="section-watchlist">Watchlist</h2>
           {watchlistError !== null && (
             <p className="notice notice-error">Watchlist unavailable: {watchlistError}</p>
           )}

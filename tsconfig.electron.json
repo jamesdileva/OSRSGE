@@ -6,9 +6,13 @@
     "types": ["node"],
     "skipLibCheck": true,
     "strict": true,
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "verbatimModuleSyntax": true,
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    // NOTE: no verbatimModuleSyntax here — root package.json declares
+    // "type": "module", which makes verbatim ESM import/export syntax an
+    // error in a CommonJS project (TS1295). Default import elision still
+    // drops type-only imports from the CJS emit.
     "moduleDetection": "force",
     "noEmit": false,
     "outDir": "dist-electron",

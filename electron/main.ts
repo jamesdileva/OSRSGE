@@ -1,6 +1,5 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { MARKET_REFRESH_NOW, MARKET_REFRESH_UPDATED } from '../shared/ipc.js';
 import type { MarketRefreshUpdate } from '../shared/ipc.js';
 import { registerAppHandlers } from './ipc/app.handlers.js';
@@ -27,7 +26,11 @@ import { WikiPriceProvider } from '../core/market/providers/WikiPriceProvider.js
 import { closeHistoryRepository, createHistoryRepository } from '../storage/historyBackend.js';
 import type { HistoryRepository } from '../core/history/HistoryRepository.js';
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+// CJS build (tsconfig.electron module commonjs): __dirname is the
+// dist-electron/electron dir both in dev and inside app.asar. ESM emit
+// is forbidden here — Electron's sandboxed preload runner cannot parse
+// `import` statements (#57 follow-up: bridge-unavailable in unpacked exe).
+const currentDir = __dirname;
 const DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173';
 
 let mainWindow: BrowserWindow | null = null;
